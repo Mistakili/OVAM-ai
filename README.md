@@ -21,14 +21,19 @@ The core extraction runs through Gemma using Ollama during local development.
 
 ## Run locally
 
-Install Ollama and make Gemma available, then:
+OVAM AI is designed to run the model locally during development. Ollama provides the local model runtime and exposes its API on `http://localhost:11434`. citeturn1search0
+
+On Windows:
 
 ```bash
+ollama pull gemma3:1b
 npm install
 npm run dev
 ```
 
-The app expects Ollama at `http://localhost:11434` by default. Override it with `GEMMA_BASE_URL` and `GEMMA_MODEL`.
+Then open the Vite URL shown in the terminal. Gemma 3 is available in a 1B size, which keeps the first local prototype lightweight. citeturn0search2
+
+For a deployed version, the `/api/extract-lead` route can be connected to a hosted Gemma runtime. The local path remains the reference implementation.
 
 ## Why open-weight AI?
 
