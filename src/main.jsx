@@ -15,10 +15,13 @@ function App(){
     if(!input.trim()) return;
     setLoading(true); setError("");
     try{
-      const res=await fetch("/api/extract-lead",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text:input})});
+      const local=import.meta.env.DEV;
+      const prompt=`You are the lead extraction engine for OVAM Realty, a Nigerian real-estate business focused on property and land sales.\nReturn ONLY valid JSON with exactly these keys: name, phone, property, location, budget, timeline, status, notes. Use empty strings for unknown values. Set status to New unless another status is explicitly stated.\nLead description:\n${input}`;
+      const res=await fetch(local?"/ollama/api/generate":"/api/extract-lead",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(local?{model:"gemma3:1b",prompt,stream:false,format:"json"}:{text:input})});
       const data=await res.json();
       if(!res.ok) throw new Error(data.error||"Could not extract lead");
-      setLead({...emptyLead,...data.lead});
+      const extracted=local?JSON.parse(data.response):data.lead;
+      setLead({...emptyLead,...extracted});
     }catch(e){setError(e.message)}
     finally{setLoading(false)}
   }
