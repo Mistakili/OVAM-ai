@@ -17,12 +17,13 @@ function App(){
     setLoading(true); setError("");
     try{
       const local=import.meta.env.DEV;
-      const prompt=`You are the lead extraction engine for OVAM Realty, a Nigerian real-estate business focused on property and land sales.\nReturn ONLY valid JSON with exactly these keys: name, phone, property, location, budget, timeline, status, notes. Use empty strings for unknown values. Set status to New unless another status is explicitly stated.\nLead description:\n${input}`;
-      const res=await fetch(local?"/ollama/api/generate":"/api/extract-lead",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(local?{model:"gemma3:1b",prompt,stream:false,format:"json"}:{text:input})});
+      const prompt=`You are OVAM AI, a Nigerian real-estate CRM assistant. Return ONLY valid JSON with action and lead fields.\nAction must be create_lead, update_lead, or no_action. Extract only stated facts.\nUser update:\n${input}`;
+      const res=await fetch(local?"/ollama/api/generate":"/api/assistant",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(local?{model:"gemma3:1b",prompt,stream:false,format:"json"}:{text:input})});
       const data=await res.json();
-      if(!res.ok) throw new Error(data.error||"Could not extract lead");
-      const extracted=local?JSON.parse(data.response):data.lead;
-      setLead({...emptyLead,...extracted});
+      if(!res.ok) throw new Error(data.error||"Could not process update");
+      const result=local?JSON.parse(data.response):data;
+      if((result.action||"create_lead")==="no_action") throw new Error("I need a little more lead information before I can create a CRM record.");
+      setLead({...emptyLead,...(result.lead||{})});
     }catch(e){setError(e.message)}
     finally{setLoading(false)}
   }
