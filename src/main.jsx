@@ -10,6 +10,7 @@ function App(){
   const [loading,setLoading]=useState(false);
   const [error,setError]=useState("");
   const [list,setList]=useState(()=>JSON.parse(localStorage.getItem("ovam-leads")||"[]"));
+  const demoLead="I just spoke to Sarah. She wants a residential plot around Akobo, Ibadan. Her budget is about 10 million naira and she wants to buy within the next two months. Her phone number is 08012345678.";
 
   async function extractLead(){
     if(!input.trim()) return;
@@ -54,7 +55,7 @@ function App(){
     <section className="capture card">
       <div className="section-title"><span>01</span><div><h2>Tell OVAM AI about a lead</h2><p>For now, type exactly what you would say aloud. Voice comes next.</p></div></div>
       <textarea value={input} onChange={e=>setInput(e.target.value)} placeholder="Example: I just spoke to Sarah. She wants land around Akobo, Ibadan. Her budget is about 10 million and she wants to buy within two months." />
-      <div className="actions"><button className="voice" onClick={startVoice}>🎙 Speak lead</button><button onClick={extractLead} disabled={loading||!input.trim()}>{loading?"Extracting…":"Extract lead"}</button></div>
+      <div className="quick-demo"><button className="demo" onClick={()=>{setInput(demoLead);setError("")}}>Load real-world example</button></div><div className="actions"><button className="voice" onClick={startVoice}>🎙 Speak lead</button><button onClick={extractLead} disabled={loading||!input.trim()}>{loading?"Extracting…":"Extract lead"}</button></div>
       {error&&<div className="error">{error}</div>}
     </section>
 
