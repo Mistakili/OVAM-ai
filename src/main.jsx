@@ -9,7 +9,7 @@ function App(){
   const [lead,setLead]=useState(null);
   const [loading,setLoading]=useState(false);
   const [error,setError]=useState("");
-  const [list,setList]=useState([]);
+  const [list,setList]=useState(()=>JSON.parse(localStorage.getItem("ovam-leads")||"[]"));
 
   async function extractLead(){
     if(!input.trim()) return;
@@ -25,8 +25,21 @@ function App(){
 
   function saveLead(){
     if(!lead) return;
-    setList(prev=>[{...lead,id:Date.now()},...prev]);
+    const next=[{...lead,id:Date.now()},...list];
+    setList(next); localStorage.setItem("ovam-leads",JSON.stringify(next));
     setInput(""); setLead(null);
+  }
+
+  function startVoice(){
+    const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
+    if(!SpeechRecognition){setError("Voice input is not supported in this browser. You can still type the lead.");return;}
+    const recognition=new SpeechRecognition();
+    recognition.lang="en-NG"; recognition.interimResults=false; recognition.maxAlternatives=1;
+    setError("");
+    recognition.onstart=()=>setError("Listening… speak naturally about the lead.");
+    recognition.onresult=e=>{setInput(e.results[0][0].transcript);setError("")};
+    recognition.onerror=e=>setError("Voice input stopped: "+e.error);
+    recognition.start();
   }
 
   return <main className="shell">
@@ -38,7 +51,7 @@ function App(){
     <section className="capture card">
       <div className="section-title"><span>01</span><div><h2>Tell OVAM AI about a lead</h2><p>For now, type exactly what you would say aloud. Voice comes next.</p></div></div>
       <textarea value={input} onChange={e=>setInput(e.target.value)} placeholder="Example: I just spoke to Sarah. She wants land around Akobo, Ibadan. Her budget is about 10 million and she wants to buy within two months." />
-      <button onClick={extractLead} disabled={loading||!input.trim()}>{loading?"Extracting…":"Extract lead"}</button>
+      <div className="actions"><button className="voice" onClick={startVoice}>🎙 Speak lead</button><button onClick={extractLead} disabled={loading||!input.trim()}>{loading?"Extracting…":"Extract lead"}</button></div>
       {error&&<div className="error">{error}</div>}
     </section>
 
