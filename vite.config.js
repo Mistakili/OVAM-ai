@@ -42,11 +42,16 @@ function geminiDevApi(){
         try{
           let body="";
           for await(const chunk of req) body+=chunk;
-          const {text,history=[],currentLead={name:"",phone:"",property:"",location:"",budget:"",timeline:"",status:"New",notes:""}}=JSON.parse(body||"{}");
+          const parsed=JSON.parse(body||"{}");
+          const text=parsed.text;
+          const history=parsed.history||[];
+          const currentLead=parsed.currentLead||{name:"",phone:"",property:"",location:"",budget:"",timeline:"",status:"New",notes:""};
+
           if(!text?.trim()){
             res.statusCode=400; res.setHeader("Content-Type","application/json");
             return res.end(JSON.stringify({error:"Message is required"}));
           }
+
           const env=loadEnv(server.config.mode,process.cwd(),"");
           const apiKey=env.GEMINI_API_KEY;
           const model=env.GEMMA_MODEL||"gemma-4-26b-a4b-it";
@@ -54,6 +59,7 @@ function geminiDevApi(){
             res.statusCode=500; res.setHeader("Content-Type","application/json");
             return res.end(JSON.stringify({error:"GEMINI_API_KEY is not configured"}));
           }
+
           const leadSchema={
             type:"object",
             properties:{
@@ -71,37 +77,42 @@ function geminiDevApi(){
             },
             required:["action","reply","lead"]
           };
-          const prompt=\`You are OVAM AI, a warm and concise Nigerian real-estate CRM assistant.
 
-You are a conversational real-estate assistant. Your job is to collect a prospect's details naturally and keep a running lead record.
+          const prompt=[
+            "You are OVAM AI, a warm and concise Nigerian real-estate CRM assistant.",
+            "",
+            "You are a conversational real-estate assistant. Your job is to collect a prospect's details naturally and keep a running lead record.",
+            "",
+            "Return ONLY one JSON object matching the supplied schema.",
+            "",
+            "Rules:",
+            "- Treat CURRENT LEAD as the source of truth for facts already collected.",
+            "- Treat conversation history and the latest user message as additional context.",
+            "- Merge new facts into CURRENT LEAD. Never erase a previously collected field unless the user explicitly corrects it.",
+            "- Extract phone numbers exactly as spoken when clear. Preserve leading zeroes.",
+            "- Never invent information.",
+            "- Prioritize name, phone, property, location, budget, timeline.",
+            "- If one important field is missing, use action \"ask_question\" and ask ONE short natural question about the next missing field.",
+            "- Do not repeat a question that has already been answered.",
+            "- If all six priority fields are present, use action \"create_lead\".",
+            "- If the user clearly corrects an existing lead, use action \"update_lead\".",
+            "- If the user is only greeting or chatting without a CRM-relevant update, use action \"no_action\".",
+            "- reply is exactly what OVAM AI should say aloud. Keep it warm, natural and brief.",
+            "- Return the COMPLETE merged lead on every response, not just newly mentioned fields.",
+            "- Unknown fields must be empty strings.",
+            "",
+            "CURRENT LEAD:",
+            JSON.stringify(currentLead),
+            "",
+            "CONVERSATION:",
+            history.map(x=>x.role.toUpperCase()+": "+x.text).join("\n"),
+            "",
+            "LATEST USER MESSAGE:",
+            text
+          ].join("\n");
 
-Return ONLY one JSON object matching the supplied schema.
-
-Rules:
-- Treat CURRENT LEAD as the source of truth for facts already collected.
-- Treat conversation history and the latest user message as additional context.
-- Merge new facts into CURRENT LEAD. Never erase a previously collected field unless the user explicitly corrects it.
-- Extract phone numbers exactly as spoken when clear. Preserve leading zeroes.
-- Never invent information.
-- Prioritize name, phone, property, location, budget, timeline.
-- If one important field is missing, use action "ask_question" and ask ONE short natural question about the next missing field.
-- Do not repeat a question that has already been answered.
-- If all six priority fields are present, use action "create_lead".
-- If the user clearly corrects an existing lead, use action "update_lead".
-- If the user is only greeting or chatting without a CRM-relevant update, use action "no_action".
-- reply is exactly what OVAM AI should say aloud. Keep it warm, natural and brief.
-- Return the COMPLETE merged lead on every response, not just newly mentioned fields.
-- Unknown fields must be empty strings.
-
-CURRENT LEAD:
-\${JSON.stringify(currentLead)}
-
-CONVERSATION:
-\${history.map(x=>x.role.toUpperCase()+": "+x.text).join("\\n")}
-
-LATEST USER MESSAGE:
-\${text}\`;
-          const response=await fetch(\`https://generativelanguage.googleapis.com/v1beta/models/\${model}:generateContent\`,{
+          const url="https://generativelanguage.googleapis.com/v1beta/models/"+model+":generateContent";
+          const response=await fetch(url,{
             method:"POST",
             headers:{"Content-Type":"application/json","x-goog-api-key":apiKey},
             body:JSON.stringify({
@@ -109,27 +120,44 @@ LATEST USER MESSAGE:
               generationConfig:{responseMimeType:"application/json",responseSchema:leadSchema}
             })
           });
+
           const rawText=await response.text();
-          if(!response.ok) throw new Error(\`Gemma request failed (\${response.status}): \${rawText.slice(0,300)}\`);
+          if(!response.ok) throw new Error("Gemma request failed ("+response.status+"): "+rawText.slice(0,300));
+
           const data=JSON.parse(rawText);
           const raw=data?.candidates?.[0]?.content?.parts?.[0]?.text;
           if(!raw) throw new Error("Gemma returned no structured response");
-          const cleaned=String(raw).trim().replace(/^\`\`\`(?:json)?\s*/i,"").replace(/\s*\`\`\`$/,"");
+
+          const cleaned=String(raw).trim()
+            .replace(/^\s*\x60\x60\x60(?:json)?\s*/i,"")
+            .replace(/\s*\x60\x60\x60\s*$/,"");
+
           let result;
-          try{result=JSON.parse(cleaned)}catch{
-            const start=cleaned.indexOf("{"),end=cleaned.lastIndexOf("}");
+          try{
+            result=JSON.parse(cleaned);
+          }catch{
+            const start=cleaned.indexOf("{");
+            const end=cleaned.lastIndexOf("}");
             if(start===-1||end<=start) throw new Error("Gemma returned text instead of the expected CRM JSON.");
             result=JSON.parse(cleaned.slice(start,end+1));
           }
+
           const emptyLead={name:"",phone:"",property:"",location:"",budget:"",timeline:"",status:"New",notes:""};
-          res.statusCode=200; res.setHeader("Content-Type","application/json");
-          res.end(JSON.stringify({action:result.action||"no_action",reply:result.reply||"",lead:{...emptyLead,...currentLead,...(result.lead||{})}}));
+          res.statusCode=200;
+          res.setHeader("Content-Type","application/json");
+          res.end(JSON.stringify({
+            action:result.action||"no_action",
+            reply:result.reply||"",
+            lead:{...emptyLead,...currentLead,...(result.lead||{})}
+          }));
         }catch(error){
-          res.statusCode=500; res.setHeader("Content-Type","application/json");
+          res.statusCode=500;
+          res.setHeader("Content-Type","application/json");
           res.end(JSON.stringify({error:error.message||"Gemma assistant failed"}));
         }
       });
     }
   };
 }
+
 export default defineConfig({plugins:[react(),assemblyAITokenApi(),geminiDevApi()]});
