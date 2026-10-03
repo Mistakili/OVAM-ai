@@ -194,7 +194,7 @@ function App(){
           tools:OVAM_TOOLS,
           input:{transcription_mode:"balanced",voice_focus:"near-field",keyterms:["OVAM Realty","OVAM AI","Ibadan","Akobo","Akobo estate","Bodija","Jericho","Ring Road","Monatan","Iwo Road","Naira","WhatsApp","Instagram"]}
         };
-        session.tools=OVAM_TOOLS;
+        if(!agentId)session.tools=OVAM_TOOLS;
         socket.send(JSON.stringify({type:"session.update",session}));
       };
 
