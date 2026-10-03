@@ -16,15 +16,12 @@ function App(){
     if(!input.trim()) return;
     setLoading(true); setError("");
     try{
-      const local=import.meta.env.DEV;
-      const prompt=`You are OVAM AI, a Nigerian real-estate CRM assistant. Return ONLY valid JSON with action and lead fields.\nAction must be create_lead, update_lead, or no_action. Extract only stated facts.\nUser update:\n${input}`;
-      const res=await fetch(local?"/ollama/api/generate":"/api/assistant",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(local?{model:"gemma3:1b",prompt,stream:false,format:"json"}:{text:input})});
+      const res=await fetch("/api/assistant",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text:input})});
       const data=await res.json();
       if(!res.ok) throw new Error(data.error||"Could not process update");
-      const result=local?JSON.parse(data.response):data;
-      if((result.action||"create_lead")==="no_action") throw new Error("I need a little more lead information before I can create a CRM record.");
-      setLead({...emptyLead,...(result.lead||{})});
-    }catch(e){setError(e.message)}
+      if((data.action||"create_lead")==="no_action") throw new Error("I need a little more lead information before I can create a CRM record.");
+      setLead({...emptyLead,...(data.lead||{})});
+    }catch(e){setError(e.message||"Something went wrong")}
     finally{setLoading(false)}
   }
 
@@ -54,14 +51,15 @@ function App(){
     </header>
 
     <section className="capture card">
-      <div className="section-title"><span>01</span><div><h2>Tell OVAM AI about a lead</h2><p>For now, type exactly what you would say aloud. Voice comes next.</p></div></div>
+      <div className="section-title"><span>01</span><div><h2>Tell OVAM AI about a lead</h2><p>Describe what happened with the prospect. OVAM AI will structure it for you.</p></div></div>
       <textarea value={input} onChange={e=>setInput(e.target.value)} placeholder="Example: I just spoke to Sarah. She wants land around Akobo, Ibadan. Her budget is about 10 million and she wants to buy within two months." />
-      <div className="quick-demo"><button className="demo" onClick={()=>{setInput(demoLead);setError("")}}>Load real-world example</button></div><div className="actions"><button className="voice" onClick={startVoice}>🎙 Speak lead</button><button onClick={extractLead} disabled={loading||!input.trim()}>{loading?"Extracting…":"Extract lead"}</button></div>
+      <div className="quick-demo"><button className="demo" onClick={()=>{setInput(demoLead);setError("")}}>Load real-world example</button></div>
+      <div className="actions"><button className="voice" onClick={startVoice}>🎙 Speak lead</button><button onClick={extractLead} disabled={loading||!input.trim()}>{loading?"Understanding…":"Extract lead"}</button></div>
       {error&&<div className="error">{error}</div>}
     </section>
 
     {lead&&<section className="card result">
-      <div className="section-title"><span>02</span><div><h2>Lead found</h2><p>Review the information before saving it.</p></div></div>
+      <div className="section-title"><span>02</span><div><h2>Lead found</h2><p>Gemma structured the update. Review it before saving.</p></div></div>
       <div className="grid">{Object.entries(lead).map(([key,value])=><label key={key}><span>{key}</span><input value={value||""} onChange={e=>setLead({...lead,[key]:e.target.value})}/></label>)}</div>
       <button onClick={saveLead}>Save to CRM</button>
     </section>}
