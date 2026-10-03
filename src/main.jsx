@@ -252,7 +252,7 @@ function App(){
           <span className="orb-ring ring-one"></span><span className="orb-ring ring-two"></span><span className="mic">{voiceState==="listening"?"■":"●"}</span>
         </button>
         <strong>{voiceLabel}</strong>
-        {voiceState==="listening"&&<div className="live-meter"><span className="live-dot"></span><span>MIC LIVE</span><div className="meter-bars">{[1,2,3,4,5,6,7].map(i=><i key={i} style={{transform:\`scaleY(\${Math.max(.18,micLevel*(.55+(i%3)*.18))})\`}}/> )}</div><button className="stop-voice" onClick={stopVoice}>Stop recording</button></div>}
+        {voiceState==="listening"&&<div className="live-meter"><span className="live-dot"></span><span>MIC LIVE</span><div className="meter-bars">{[1,2,3,4,5,6,7].map(i=><i key={i} style={{transform:"scaleY("+Math.max(.18,micLevel*(.55+(i%3)*.18))+")"}}/> )}</div><button className="stop-voice" onClick={stopVoice}>Stop recording</button></div>}
         {voiceState==="listening"&&input&&<div className="live-transcript">{input}</div>}
         {conversation.length>0&&<div className="voice-conversation">{conversation.map((m,i)=><div key={i} className={m.role}>{m.role==="user"?"You":"OVAM AI"}: {m.text}</div>)}</div>}
         {voiceState==="idle"&&input&&<div className="live-transcript">Review the transcript below, correct anything misheard, then click Understand this lead.</div>}
