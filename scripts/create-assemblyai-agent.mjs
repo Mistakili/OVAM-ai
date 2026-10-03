@@ -1,5 +1,3 @@
-import "dotenv/config";
-
 const key=process.env.ASSEMBLYAI_API_KEY;
 if(!key) throw new Error("ASSEMBLYAI_API_KEY is missing");
 
