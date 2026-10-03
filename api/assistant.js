@@ -39,6 +39,8 @@ function buildPrompt(text,history=[],currentLead=emptyLead){
     "- Capture useful context such as source, preferred contact method, objections, and important notes when mentioned.",
     "- Status may be New, Contacted, Qualified, Viewing, Negotiating, Follow-up, Won, Lost, or another sensible CRM status supported by what the user said.",
     "- Do not force the agent to provide every field.",
+    "- Never mark a lead ready to create just because a name was captured. For a normal lead, keep gathering until you have a name, a phone number, and at least one meaningful property, location, budget, or purchase-timing detail.",
+    "- If the lead is not ready, use action \"ask_question\" and ask exactly one useful missing question.",
     "- Ask ONE short natural question only when a missing detail is important to move the lead forward.",
     "- Never ask for a field that has already been answered.",
     "- If the user gives enough information to create a useful lead, use action \"create_lead\".",
