@@ -16,10 +16,11 @@ class PCMProcessor extends AudioWorkletProcessor{
           const v=this.buffer[j]/0x8000;
           sum+=v*v;
         }
+        const chunk=this.buffer.slice();
         this.port.postMessage({
-          pcm:this.buffer.slice().buffer,
+          pcm:chunk.buffer,
           level:Math.min(1,Math.sqrt(sum/this.buffer.length)*3)
-        },[this.buffer.slice().buffer]);
+        },[chunk.buffer]);
         this.offset=0;
       }
     }
