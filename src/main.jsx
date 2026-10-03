@@ -137,8 +137,8 @@ function App(){
         return;
       }
 
-      const declinedSave=/^(no|nope)\\b/i.test(text.trim());
-      const clearlyNeedsMoreInfo=/\\b(still have|other things|something else|more to add|more information|not yet|don't save|do not save)\\b/i.test(text.trim());
+      const declinedSave=/^(no|nope)\b/i.test(text.trim());
+      const clearlyNeedsMoreInfo=/\b(still have|other things|something else|more to add|more information|not yet|don't save|do not save)\b/i.test(text.trim());
 
       if(declinedSave && clearlyNeedsMoreInfo){
         awaitingSaveRef.current=false;
@@ -154,7 +154,7 @@ function App(){
         return;
       }
 
-      if(/^(not yet|don't save|do not save)\\b/i.test(text.trim())){
+      if(/^(not yet|don't save|do not save)\b/i.test(text.trim())){
         awaitingSaveRef.current=false;
         const followUp="No problem. What else should I add or change?";
         const updatedHistory=[...historyRef.current,{role:"user",text},{role:"assistant",text:followUp}];
