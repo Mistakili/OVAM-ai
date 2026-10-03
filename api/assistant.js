@@ -79,7 +79,7 @@ export default async function handler(req,res){
     const response=await fetch(url,{
       method:"POST",
       headers:{"Content-Type":"application/json","x-goog-api-key":process.env.GEMINI_API_KEY},
-      body:JSON.stringify({contents:[{parts:[{text:buildPrompt(text,history,currentLead)}]}],generationConfig:{responseMimeType:"application/json",responseSchema:schema}})
+      body:JSON.stringify({contents:[{parts:[{text:buildPrompt(text,history,currentLead)}]}],generationConfig:{responseMimeType:"application/json",responseSchema:schema,maxOutputTokens:256}})
     });
     const rawResponse=await response.text();
     if(!response.ok) throw new Error("Gemma request failed ("+response.status+"): "+rawResponse.slice(0,300));
