@@ -26,6 +26,7 @@ function App(){
   const [micLevel,setMicLevel]=useState(0);
   const [message,setMessage]=useState("");
   const [conversation,setConversation]=useState([]);
+  const [lastVoiceEvent,setLastVoiceEvent]=useState("");
   const voiceSession=useRef({stream:null,ctx:null,worklet:null,source:null,socket:null});
   const voiceActiveRef=useRef(false);
   const sessionReadyRef=useRef(false);
@@ -132,7 +133,7 @@ function App(){
 
   async function startVoice(){
     if(voiceState!=="idle")return;
-    setMessage("");setInput("");setLead(null);setConversation([]);
+    setMessage("");setInput("");setLead(null);setConversation([]);setLastVoiceEvent("");
     leadDraftRef.current={...emptyLead};pendingToolsRef.current=[];
     playbackCursorRef.current=0;voiceActiveRef.current=true;sessionReadyRef.current=false;
     setVoiceState("connecting");setMicLevel(0);
@@ -186,6 +187,8 @@ function App(){
 
       socket.onmessage=event=>{
         let data;try{data=JSON.parse(event.data)}catch{return}
+        setLastVoiceEvent(data.type||"unknown");
+        console.log("[OVAM AI voice]",data);
         switch(data.type){
           case"session.ready":
             sessionReadyRef.current=true;
@@ -209,7 +212,7 @@ function App(){
             pendingToolsRef.current.push({call_id:data.call_id,result:runTool(data)});
             break;
           case"input.speech.stopped":
-            setVoiceState("speaking");
+            setVoiceState("listening");
             break;
           case"reply.done":
             if(data.status==="interrupted"){pendingToolsRef.current=[];stopPlayback();setVoiceState("listening")}
@@ -269,7 +272,7 @@ function App(){
         {(voiceState==="listening"||voiceState==="speaking")&&<div className="live-meter"><span className="live-dot"></span><span>VOICE LIVE</span><div className="meter-bars">{[1,2,3,4,5,6,7].map(i=><i key={i} style={{transform:"scaleY("+Math.max(.18,micLevel*(.55+(i%3)*.18))+")"}}/> )}</div><button className="stop-voice" onClick={stopVoice}>End</button></div>}
         {input&&voiceState!=="idle"&&<div className="live-transcript">{input}</div>}
         {conversation.length>0&&<div className="voice-conversation">{conversation.slice(-8).map((m,i)=><div key={i} className={m.role}>{m.role==="user"?"You":"OVAM AI"}: {m.text}</div>)}</div>}
-        <span>{voiceState==="listening"?"Speak naturally about the prospect.":voiceState==="speaking"?"You can interrupt OVAM at any time.":voiceState==="connecting"?"Starting the live voice session.":"Tap the microphone and tell OVAM AI what happened."}</span>
+        <span>{voiceState==="listening"?"Speak naturally about the prospect.":voiceState==="speaking"?"You can interrupt OVAM at any time.":voiceState==="connecting"?"Starting the live voice session.":"Tap the microphone and tell OVAM AI what happened."}</span>{lastVoiceEvent&&voiceState!=="idle"&&<small className="voice-debug">Event: {lastVoiceEvent}</small>}
       </div>
 
       <div className="text-fallback">
