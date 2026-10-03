@@ -190,12 +190,24 @@ function App(){
       leadDraftRef.current=merged;
       setLead(merged);
 
-      const reply=data.action==="create_lead"?"":(data.reply||"Got it.");
+      // Keep the conversation controller from ending the interview too early.
+      // A lead is ready for save confirmation only when we have a name, a contact
+      // number, and at least one meaningful property/financial/timing detail.
+      const leadReady=Boolean(merged.name&&merged.phone&&(merged.property||merged.location||merged.budget||merged.timeline));
+      const action=data.action==="create_lead"&&!leadReady?"ask_question":data.action;
+      let reply=action==="create_lead"?"":(data.reply||"Got it.");
+      if(action==="ask_question"&&!reply){
+        if(!merged.phone) reply="What's the best phone number for Cynthia?";
+        else if(!merged.property&&!merged.location) reply="What kind of property is she interested in, and where?";
+        else if(!merged.budget) reply="What's her budget?";
+        else if(!merged.timeline) reply="When is she looking to buy?";
+        else reply="What else should I know about this prospect?";
+      }
       const updatedHistory=[...nextHistory,...(reply?[{role:"assistant",text:reply}]:[])];
       historyRef.current=updatedHistory;
       setConversation(updatedHistory);
 
-      if(data.action==="create_lead"){
+      if(action==="create_lead"){
         awaitingSaveRef.current=true;
         const confirmation="I have enough to create this lead. Should I save it to OVAM CRM?";
         historyRef.current=[...historyRef.current,{role:"assistant",text:confirmation}];
@@ -208,7 +220,7 @@ function App(){
       }
 
       processingRef.current=false;
-      if(data.action==="ask_question" && !merged.phone){
+      if(action==="ask_question" && !merged.phone){
         try{voiceSession.current.socket?.send(JSON.stringify({type:"UpdateConfiguration",min_turn_silence:512,max_turn_silence:2560}))}catch{}
       }
       acceptingAudioRef.current=true;
