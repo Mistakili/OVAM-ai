@@ -1,4 +1,4 @@
-import {defineConfig} from "vite";
+import {defineConfig,loadEnv} from "vite";
 import react from "@vitejs/plugin-react";
 
 function voiceTokenApi(){
@@ -8,8 +8,9 @@ function voiceTokenApi(){
       server.middlewares.use("/api/assemblyai-token",async(req,res,next)=>{
         if(req.method!=="GET")return next();
         try{
-          const key=server.config.env.ASSEMBLYAI_API_KEY;
-          const agentId=server.config.env.ASSEMBLYAI_AGENT_ID;
+          const env=loadEnv(server.config.mode,process.cwd(),"");
+          const key=env.ASSEMBLYAI_API_KEY;
+          const agentId=env.ASSEMBLYAI_AGENT_ID;
           if(!key||!agentId){res.statusCode=500;res.setHeader("Content-Type","application/json");return res.end(JSON.stringify({error:"Voice Agent environment is not configured"}))}
           const url=new URL("https://agents.assemblyai.com/v1/token");
           url.searchParams.set("expires_in_seconds","300");
