@@ -1,7 +1,6 @@
 import {defineConfig,loadEnv} from "vite";
 import react from "@vitejs/plugin-react";
 
-
 function assemblyAITokenApi(){
   return {
     name:"assemblyai-token-api",
@@ -46,7 +45,7 @@ function geminiDevApi(){
           const {text,history=[]}=JSON.parse(body||"{}");
           if(!text?.trim()){
             res.statusCode=400; res.setHeader("Content-Type","application/json");
-            return res.end(JSON.stringify({error:"Update is required"}));
+            return res.end(JSON.stringify({error:"Message is required"}));
           }
 
           const env=loadEnv(server.config.mode,process.cwd(),"");
@@ -61,6 +60,7 @@ function geminiDevApi(){
             type:"object",
             properties:{
               action:{type:"string",enum:["create_lead","update_lead","ask_question","no_action"]},
+              reply:{type:"string"},
               lead:{
                 type:"object",
                 properties:{
@@ -74,7 +74,7 @@ function geminiDevApi(){
             required:["action","reply","lead"]
           };
 
-          const prompt=`You are OVAM AI, a warm and concise Nigerian real-estate CRM assistant.
+          const prompt = `You are OVAM AI, a warm and concise Nigerian real-estate CRM assistant.
 
 The user is talking to you about prospects. Maintain the conversation and help turn it into a complete CRM lead.
 
@@ -87,6 +87,8 @@ Rules:
 - If important information is missing, use action "ask_question" and ask ONE natural question.
 - Prioritize name, phone, property, location, budget, timeline.
 - If enough information exists, use action "create_lead".
+- If the user clearly corrects an existing lead, use action "update_lead".
+- If the user is only greeting or chatting without a CRM-relevant update, use action "no_action".
 - reply is what OVAM AI should say aloud. Keep it short and conversational.
 - Unknown fields must be empty strings.
 
@@ -94,7 +96,7 @@ Conversation so far:
 ${history.map(x=>x.role.toUpperCase()+": "+x.text).join("\n")}
 
 Latest user message:
-${text}\`
+${text}`;
 
           const response=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,{
             method:"POST",
