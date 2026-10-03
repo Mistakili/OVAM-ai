@@ -1,4 +1,4 @@
-import React,{useState} from "react";
+import React,{useRef,useState} from "react";
 import {createRoot} from "react-dom/client";
 import "./styles.css";
 
@@ -12,6 +12,7 @@ function App(){
   const [voiceState,setVoiceState]=useState("idle");
   const [micLevel,setMicLevel]=useState(0);
   const [message,setMessage]=useState("");
+  const voiceSession=useRef({stream:null,ctx:null,worklet:null,socket:null});
   const demoLead="I just spoke to Sarah. She wants a residential plot around Akobo, Ibadan. Her budget is about 10 million naira and she wants to buy within the next two months. Her phone number is 08012345678.";
 
   async function extractLead(text=input){
@@ -34,6 +35,18 @@ function App(){
     setInput(""); setLead(null); setMessage("Lead saved to OVAM CRM.");
   }
 
+  function stopVoice(){
+    const s=voiceSession.current;
+    try{s.socket?.send(JSON.stringify({type:"Terminate"}))}catch{}
+    try{s.socket?.close()}catch{}
+    try{s.stream?.getTracks().forEach(t=>t.stop())}catch{}
+    try{s.worklet?.disconnect()}catch{}
+    try{s.ctx?.close()}catch{}
+    voiceSession.current={stream:null,ctx:null,worklet:null,socket:null};
+    setMicLevel(0);
+    if(voiceState==="listening") setVoiceState("idle");
+  }
+
   async function startVoice(){
     if(voiceState==="listening") return;
     setMessage(""); setVoiceState("listening"); setMicLevel(0);
@@ -50,8 +63,10 @@ function App(){
       worklet=new AudioWorkletNode(ctx,"pcm-processor");
       const source=ctx.createMediaStreamSource(stream);
       source.connect(worklet);
+      voiceSession.current={stream,ctx,worklet,socket:null};
 
       socket=new WebSocket("wss://streaming.assemblyai.com/v3/ws?sample_rate=16000&encoding=pcm_s16le&speech_model=universal-3-6-pro&token="+encodeURIComponent(tokenData.token));
+      voiceSession.current.socket=socket;
 
       worklet.port.onmessage=e=>{
         setMicLevel(e.data.level||0);
@@ -66,10 +81,7 @@ function App(){
             setVoiceState("processing");
             try{await extractLead(data.transcript)}
             finally{
-              setVoiceState("idle");
-              stream?.getTracks().forEach(t=>t.stop());
-              await ctx?.close().catch(()=>{});
-              setMicLevel(0);
+              stopVoice();
             }
             try{socket.send(JSON.stringify({type:"Terminate"}))}catch{}
           }
@@ -78,8 +90,9 @@ function App(){
       socket.onerror=()=>{setVoiceState("idle");setMessage("Voice connection failed. Check your AssemblyAI configuration.")};
       socket.onclose=()=>setMicLevel(0);
     }catch(e){
-      stream?.getTracks().forEach(t=>t.stop());
+      try{stream?.getTracks().forEach(t=>t.stop())}catch{}
       await ctx?.close().catch(()=>{});
+      voiceSession.current={stream:null,ctx:null,worklet:null,socket:null};
       setMicLevel(0); setVoiceState("idle"); setMessage(e.message||"Could not start voice input");
     }
   }
@@ -100,10 +113,12 @@ function App(){
       </div>
 
       <div className={"voice-panel "+voiceState}>
-        <button className="voice-orb" onClick={startVoice} disabled={loading||voiceState==="listening"}>
-          <span className="orb-ring ring-one"></span><span className="orb-ring ring-two"></span><span className="mic">●</span>
+        <button className={"voice-orb "+(voiceState==="listening"?"live":"")} onClick={voiceState==="listening"?stopVoice:startVoice} disabled={loading||voiceState==="processing"}>
+          <span className="orb-ring ring-one"></span><span className="orb-ring ring-two"></span><span className="mic">{voiceState==="listening"?"■":"●"}</span>
         </button>
         <strong>{voiceLabel}</strong>
+        {voiceState==="listening"&&<div className="live-meter"><span className="live-dot"></span><span>MIC LIVE</span><div className="meter-bars">{[1,2,3,4,5,6,7].map(i=><i key={i} style={{transform:`scaleY(${Math.max(.18,micLevel*(.55+(i%3)*.18))})`}}/> )}</div><button className="stop-voice" onClick={stopVoice}>Stop recording</button></div>}
+        {voiceState==="listening"&&input&&<div className="live-transcript">{input}</div>}
         <span>{voiceState==="listening"?"Speak naturally about the prospect.":voiceState==="processing"?"Gemma is structuring the lead.":"Tap the microphone and tell OVAM AI what happened."}</span>
       </div>
 
