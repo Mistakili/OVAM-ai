@@ -43,7 +43,7 @@ function geminiDevApi(){
         try{
           let body="";
           for await(const chunk of req) body+=chunk;
-          const {text}=JSON.parse(body||"{}");
+          const {text,history=[]}=JSON.parse(body||"{}");
           if(!text?.trim()){
             res.statusCode=400; res.setHeader("Content-Type","application/json");
             return res.end(JSON.stringify({error:"Update is required"}));
@@ -60,7 +60,7 @@ function geminiDevApi(){
           const leadSchema={
             type:"object",
             properties:{
-              action:{type:"string",enum:["create_lead","update_lead","no_action"]},
+              action:{type:"string",enum:["create_lead","update_lead","ask_question","no_action"]},
               lead:{
                 type:"object",
                 properties:{
@@ -71,26 +71,30 @@ function geminiDevApi(){
                 required:["name","phone","property","location","budget","timeline","status","notes"]
               }
             },
-            required:["action","lead"]
+            required:["action","reply","lead"]
           };
 
-          const prompt=`You are OVAM AI, a Nigerian real-estate CRM assistant.
+          const prompt=\`You are OVAM AI, a warm and concise Nigerian real-estate CRM assistant.
 
-Read the user's update and convert it into a CRM action.
+The user is talking to you about prospects. Maintain the conversation and help turn it into a complete CRM lead.
 
-Return a single JSON object matching the supplied schema. Do not write an explanation, bullets, markdown, or commentary.
+Return ONLY one JSON object matching the supplied schema.
 
 Rules:
-- Extract only facts stated or strongly implied.
+- Understand the latest message in the context of the conversation history.
+- Extract only facts stated or strongly implied. Never invent information.
+- Keep previously confirmed lead information unless corrected.
+- If important information is missing, use action "ask_question" and ask ONE natural question.
+- Prioritize name, phone, property, location, budget, timeline.
+- If enough information exists, use action "create_lead".
+- reply is what OVAM AI should say aloud. Keep it short and conversational.
 - Unknown fields must be empty strings.
-- Never invent names, phone numbers, budgets, locations, or timelines.
-- Use create_lead for a new prospect.
-- Use update_lead when the user clearly describes a change to an existing prospect.
-- Use no_action when there is not enough information to make a CRM change.
-- Keep budget and timeline in natural language.
 
-User update:
-${text}`;
+Conversation so far:
+${history.map(x=>x.role.toUpperCase()+": "+x.text).join("\n")}
+
+Latest user message:
+${text}\`
 
           const response=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,{
             method:"POST",
@@ -117,7 +121,7 @@ ${text}`;
 
           const emptyLead={name:"",phone:"",property:"",location:"",budget:"",timeline:"",status:"New",notes:""};
           res.statusCode=200; res.setHeader("Content-Type","application/json");
-          res.end(JSON.stringify({action:result.action||"no_action",lead:{...emptyLead,...(result.lead||{})}}));
+          res.end(JSON.stringify({action:result.action||"no_action",reply:result.reply||"",lead:{...emptyLead,...(result.lead||{})}}));
         }catch(error){
           res.statusCode=500; res.setHeader("Content-Type","application/json");
           res.end(JSON.stringify({error:error.message||"Gemma assistant failed"}));
