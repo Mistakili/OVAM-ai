@@ -21,6 +21,7 @@ function App(){
   const historyRef=useRef([]);
   const leadDraftRef=useRef(emptyLead);
   const [conversation,setConversation]=useState([]);
+  const awaitingSaveRef=useRef(false);
   const demoLead="I just spoke to Sarah. She wants a residential plot around Akobo, Ibadan for about 10 million naira. She can pay 3 million down and spread the balance over 12 months. She wants to buy within two months, and I should call her next Friday. She came from Instagram and prefers WhatsApp.";
 
   async function extractLead(text=input){
@@ -118,6 +119,26 @@ function App(){
     setInput(text);
 
     const nextHistory=[...historyRef.current,{role:"user",text}];
+
+    if(awaitingSaveRef.current){
+      if(/^(yes|yeah|yep|sure|okay|ok|save|save it|go ahead|do it|please do)\b/i.test(text.trim())){
+        awaitingSaveRef.current=false;
+        const savedLead=leadDraftRef.current;
+        const next=[{...savedLead,id:Date.now()},...list];
+        setList(next); localStorage.setItem("ovam-leads",JSON.stringify(next));
+        setMessage("Lead saved to OVAM CRM.");
+        const savedReply="Done. I've saved the lead to OVAM CRM.";
+        setConversation([...historyRef.current,{role:"user",text},{role:"assistant",text:savedReply}]);
+        historyRef.current=[...historyRef.current,{role:"user",text},{role:"assistant",text:savedReply}];
+        leadDraftRef.current=emptyLead;
+        setLead(null); setInput("");
+        stopVoice();
+        return;
+      }
+      if(/^(no|nope|not yet|don't|do not)\b/i.test(text.trim())){
+        awaitingSaveRef.current=false;
+      }
+    }
     historyRef.current=nextHistory;
     setConversation(nextHistory);
 
@@ -146,9 +167,12 @@ function App(){
       if(!voiceActiveRef.current)return;
 
       if(data.action==="create_lead"){
-        setMessage("Lead captured. Review the details below and save it to OVAM CRM.");
-        stopVoice();
-        return;
+        awaitingSaveRef.current=true;
+        const confirmation="I have enough to create this lead. Should I save it to OVAM CRM?";
+        historyRef.current=[...historyRef.current,{role:"assistant",text:confirmation}];
+        setConversation(prev=>[...prev,{role:"assistant",text:confirmation}]);
+        await speakReply(confirmation);
+        if(!voiceActiveRef.current)return;
       }
 
       processingRef.current=false;
@@ -169,6 +193,7 @@ function App(){
     setLead(null);
     leadDraftRef.current=emptyLead;
     historyRef.current=[];
+    awaitingSaveRef.current=false;
     setConversation([]);
     processingRef.current=false;
     acceptingAudioRef.current=false;
@@ -191,7 +216,7 @@ function App(){
       source.connect(worklet);
       voiceSession.current={stream,ctx,worklet,socket:null};
 
-      socket=new WebSocket("wss://streaming.assemblyai.com/v3/ws?sample_rate=16000&encoding=pcm_s16le&speech_model=universal-3-6-pro&min_turn_silence=300&max_turn_silence=2000&token="+encodeURIComponent(tokenData.token));
+      socket=new WebSocket("wss://streaming.assemblyai.com/v3/ws?sample_rate=16000&encoding=pcm_s16le&speech_model=universal-3-6-pro&mode=balanced&token="+encodeURIComponent(tokenData.token));
       voiceSession.current.socket=socket;
 
       worklet.port.onmessage=e=>{
