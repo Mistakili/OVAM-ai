@@ -199,18 +199,7 @@ function App(){
           case"transcript.user.delta":
             setInput(data.text||"");break;
           case"transcript.user":
-            if(data.text){
-              setInput(data.text);addConversation("user",data.text);
-              // Explicitly request the agent to generate the next reply. This is
-              // supported by the Voice Agent API and prevents a stored-agent
-              // session from ending the turn without entering generation.
-              try{
-                if(socket.readyState===WebSocket.OPEN){
-                  socket.send(JSON.stringify({type:"reply.create"}));
-                }
-              }catch{}
-            }
-            break;
+            if(data.text){setInput(data.text);addConversation("user",data.text)}break;
           case"reply.started":
             setVoiceState("speaking");break;
           case"reply.audio":
