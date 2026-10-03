@@ -13,6 +13,8 @@ function App(){
   const [micLevel,setMicLevel]=useState(0);
   const [message,setMessage]=useState("");
   const voiceSession=useRef({stream:null,ctx:null,worklet:null,socket:null});
+  const transcriptRef=useRef("");
+  const processingRef=useRef(false);
   const demoLead="I just spoke to Sarah. She wants a residential plot around Akobo, Ibadan. Her budget is about 10 million naira and she wants to buy within the next two months. Her phone number is 08012345678.";
 
   async function extractLead(text=input){
@@ -44,12 +46,12 @@ function App(){
     try{s.ctx?.close()}catch{}
     voiceSession.current={stream:null,ctx:null,worklet:null,socket:null};
     setMicLevel(0);
-    if(voiceState==="listening") setVoiceState("idle");
+    setVoiceState("idle");
   }
 
   async function startVoice(){
-    if(voiceState==="listening") return;
-    setMessage(""); setVoiceState("listening"); setMicLevel(0);
+    if(voiceState!=="idle") return;
+    setMessage(""); setInput(""); transcriptRef.current=""; processingRef.current=false; setVoiceState("listening"); setMicLevel(0);
     let stream=null,ctx=null,worklet=null,socket=null;
     try{
       const tokenRes=await fetch("/api/assemblyai-token");
@@ -73,18 +75,16 @@ function App(){
         if(socket.readyState===WebSocket.OPEN) socket.send(e.data.pcm);
       };
 
-      socket.onmessage=async event=>{
+      socket.onmessage=event=>{
         const data=JSON.parse(event.data);
-        if(data.type==="Turn" && data.transcript){
+        if(data.type==="Turn" && data.transcript && !processingRef.current){
+          // Display transcription for review. Never submit partial speech to Gemma.
+          transcriptRef.current=data.transcript;
           setInput(data.transcript);
-          if(data.end_of_turn){
-            setVoiceState("processing");
-            try{await extractLead(data.transcript)}
-            finally{
-              stopVoice();
-            }
-            try{socket.send(JSON.stringify({type:"Terminate"}))}catch{}
-          }
+        }
+        if(data.type==="Error"){
+          setMessage(data.error||"Transcription failed");
+          stopVoice();
         }
       };
       socket.onerror=()=>{setVoiceState("idle");setMessage("Voice connection failed. Check your AssemblyAI configuration.")};
@@ -119,6 +119,7 @@ function App(){
         <strong>{voiceLabel}</strong>
         {voiceState==="listening"&&<div className="live-meter"><span className="live-dot"></span><span>MIC LIVE</span><div className="meter-bars">{[1,2,3,4,5,6,7].map(i=><i key={i} style={{transform:`scaleY(${Math.max(.18,micLevel*(.55+(i%3)*.18))})`}}/> )}</div><button className="stop-voice" onClick={stopVoice}>Stop recording</button></div>}
         {voiceState==="listening"&&input&&<div className="live-transcript">{input}</div>}
+        {voiceState==="idle"&&input&&<div className="live-transcript">Review the transcript below, correct anything misheard, then click Understand this lead.</div>}
         <span>{voiceState==="listening"?"Speak naturally about the prospect.":voiceState==="processing"?"Gemma is structuring the lead.":"Tap the microphone and tell OVAM AI what happened."}</span>
       </div>
 
