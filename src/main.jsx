@@ -113,6 +113,7 @@ function App(){
 
   async function handleVoiceTurn(text){
     if(!text?.trim()||processingRef.current||!voiceActiveRef.current)return;
+    try{voiceSession.current.socket?.send(JSON.stringify({type:"UpdateConfiguration",mode:"balanced"}))}catch{}
     processingRef.current=true;
     acceptingAudioRef.current=false;
     setVoiceState("processing");
@@ -176,6 +177,9 @@ function App(){
       }
 
       processingRef.current=false;
+      if(data.action==="ask_question" && !merged.phone){
+        try{voiceSession.current.socket?.send(JSON.stringify({type:"UpdateConfiguration",min_turn_silence:512,max_turn_silence:2560}))}catch{}
+      }
       acceptingAudioRef.current=true;
       setVoiceState("listening");
     }catch(e){
