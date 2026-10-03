@@ -3,7 +3,11 @@ import {createRoot} from "react-dom/client";
 import "./styles.css";
 
 const emptyLead={name:"",phone:"",email:"",property:"",location:"",budget:"",dealPrice:"",deposit:"",paymentPlan:"",paymentFrequency:"",amountPaid:"",balance:"",timeline:"",nextFollowUp:"",nextAction:"",status:"New",source:"",preferredContact:"",objections:"",notes:""};
-const OVAM_SYSTEM_PROMPT="You are OVAM AI, a warm and concise voice assistant for a real-estate realtor in Nigeria. Have a natural conversation. When the realtor tells you about a prospect, listen to the story and ask one useful follow-up question at a time. Never turn the conversation into a questionnaire. Keep spoken replies short and natural. Do not invent facts.";
+const OVAM_SYSTEM_PROMPT="You are OVAM AI, a warm and concise voice assistant for a real-estate realtor in Nigeria. Have a natural conversation. When the realtor tells you about a prospect, listen to the story and ask one useful follow-up question at a time. Never turn the conversation into a questionnaire. Whenever the realtor gives or corrects a lead fact, call update_lead with every fact you learned in that turn. Never invent facts. Once enough information is captured, briefly summarize and ask whether they want the lead saved. Only call save_lead after explicit confirmation. Keep spoken replies short and natural.";
+const OVAM_TOOLS=[
+ {type:"function",name:"update_lead",description:"Update the current OVAM CRM lead draft whenever the realtor provides or corrects a lead fact. Never invent facts and never save the lead.",parameters:{type:"object",properties:{name:{type:"string"},phone:{type:"string"},email:{type:"string"},property:{type:"string"},location:{type:"string"},budget:{type:"string"},dealPrice:{type:"string"},deposit:{type:"string"},paymentPlan:{type:"string"},paymentFrequency:{type:"string"},amountPaid:{type:"string"},balance:{type:"string"},timeline:{type:"string"},nextFollowUp:{type:"string"},nextAction:{type:"string"},status:{type:"string"},source:{type:"string"},preferredContact:{type:"string"},objections:{type:"string"},notes:{type:"string"}},additionalProperties:false}},
+ {type:"function",name:"save_lead",description:"Save the current lead to OVAM CRM only after the realtor explicitly confirms that they want it saved.",parameters:{type:"object",properties:{},additionalProperties:false}}
+];
 const fieldLabels={name:"Name",phone:"Phone",email:"Email",property:"Property",location:"Location",budget:"Budget",dealPrice:"Deal price",deposit:"Deposit",paymentPlan:"Payment plan",paymentFrequency:"Payment frequency",amountPaid:"Amount paid",balance:"Balance",timeline:"Purchase timeline",nextFollowUp:"Next follow-up",nextAction:"Next action",status:"Status",source:"Lead source",preferredContact:"Preferred contact",objections:"Objections",notes:"Notes"};
 
 function bytesToBase64(buffer){
@@ -186,6 +190,7 @@ function App(){
           system_prompt:OVAM_SYSTEM_PROMPT,
           greeting:"Hi, I'm OVAM AI. Tell me what happened with the prospect, and I'll capture the details for you.",
           output:{voice:"anna"},
+          tools:OVAM_TOOLS,
           input:{transcription_mode:"balanced",voice_focus:"near-field",keyterms:["OVAM Realty","OVAM AI","Ibadan","Akobo","Akobo estate","Bodija","Jericho","Ring Road","Monatan","Iwo Road","Naira","WhatsApp","Instagram"]}
         }}));
       };
