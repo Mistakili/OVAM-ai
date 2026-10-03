@@ -149,7 +149,7 @@ function App(){
       const res=await fetch("/api/assistant",{
         method:"POST",
         headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({text,history:nextHistory.slice(0,-1),currentLead})
+        body:JSON.stringify({text,history:nextHistory.slice(-6,-1),currentLead})
       });
       const data=await res.json();
       if(!res.ok) throw new Error(data.error||"Could not understand that");
@@ -158,14 +158,10 @@ function App(){
       leadDraftRef.current=merged;
       setLead(merged);
 
-      const reply=data.reply||"Got it.";
-      const updatedHistory=[...nextHistory,{role:"assistant",text:reply}];
+      const reply=data.action==="create_lead"?"":(data.reply||"Got it.");
+      const updatedHistory=[...nextHistory,...(reply?[{role:"assistant",text:reply}]:[])];
       historyRef.current=updatedHistory;
       setConversation(updatedHistory);
-
-      await speakReply(reply);
-
-      if(!voiceActiveRef.current)return;
 
       if(data.action==="create_lead"){
         awaitingSaveRef.current=true;
@@ -173,6 +169,9 @@ function App(){
         historyRef.current=[...historyRef.current,{role:"assistant",text:confirmation}];
         setConversation(prev=>[...prev,{role:"assistant",text:confirmation}]);
         await speakReply(confirmation);
+        if(!voiceActiveRef.current)return;
+      }else{
+        await speakReply(reply);
         if(!voiceActiveRef.current)return;
       }
 
