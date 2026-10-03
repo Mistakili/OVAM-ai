@@ -17,6 +17,7 @@ function App(){
   const acceptingAudioRef=useRef(false);
   const voiceActiveRef=useRef(false);
   const historyRef=useRef([]);
+  const leadDraftRef=useRef(emptyLead);
   const [conversation,setConversation]=useState([]);
   const demoLead="I just spoke to Sarah. She wants a residential plot around Akobo, Ibadan. Her budget is about 10 million naira and she wants to buy within the next two months. Her phone number is 08012345678.";
 
@@ -24,11 +25,17 @@ function App(){
     if(!text.trim()) return;
     setLoading(true); setMessage("");
     try{
-      const res=await fetch("/api/assistant",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text})});
+      const res=await fetch("/api/assistant",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({text,currentLead:leadDraftRef.current})
+      });
       const data=await res.json();
       if(!res.ok) throw new Error(data.error||"Could not process update");
       if((data.action||"create_lead")==="no_action") throw new Error("I need a little more lead information before I can create a CRM record.");
-      setLead({...emptyLead,...(data.lead||{})});
+      const merged={...emptyLead,...leadDraftRef.current,...(data.lead||{})};
+      leadDraftRef.current=merged;
+      setLead(merged);
     }catch(e){setMessage(e.message||"Something went wrong")}
     finally{setLoading(false)}
   }
@@ -37,16 +44,48 @@ function App(){
     if(!lead) return;
     const next=[{...lead,id:Date.now()},...list];
     setList(next); localStorage.setItem("ovam-leads",JSON.stringify(next));
+    leadDraftRef.current=emptyLead;
     setInput(""); setLead(null); setMessage("Lead saved to OVAM CRM.");
   }
 
-  function speakReply(text){
-    if(!text||!("speechSynthesis" in window)) return Promise.resolve();
+  function preferredSpeechVoice(){
+    if(!("speechSynthesis" in window)) return null;
+    const voices=window.speechSynthesis.getVoices();
+    const preferred=[
+      /Microsoft Jenny.*English/i,
+      /Microsoft Aria.*English/i,
+      /Microsoft Ava.*English/i,
+      /Microsoft Sonia.*English/i,
+      /Microsoft Zira.*English/i,
+      /Google UK English Female/i,
+      /Google US English/i,
+      /Samantha/i,
+      /Karen/i
+    ];
+    for(const pattern of preferred){
+      const voice=voices.find(v=>pattern.test(v.name));
+      if(voice) return voice;
+    }
+    return voices.find(v=>/^en(-|_)/i.test(v.lang))||voices.find(v=>/^en/i.test(v.lang))||null;
+  }
+
+  async function speakReply(text){
+    if(!text||!("speechSynthesis" in window)) return;
+    if(!window.speechSynthesis.getVoices().length){
+      await new Promise(resolve=>{
+        const timer=setTimeout(resolve,250);
+        window.speechSynthesis.addEventListener("voiceschanged",()=>{clearTimeout(timer);resolve()},{once:true});
+      });
+    }
     return new Promise(resolve=>{
       window.speechSynthesis.cancel();
       const utterance=new SpeechSynthesisUtterance(text);
-      utterance.lang="en-NG";
-      utterance.rate=0.98;
+      const voice=preferredSpeechVoice();
+      if(voice) utterance.voice=voice;
+      utterance.lang=voice?.lang||"en-NG";
+      utterance.rate=0.92;
+      utterance.pitch=1;
+      utterance.volume=1;
       utterance.onend=resolve;
       utterance.onerror=resolve;
       window.speechSynthesis.speak(utterance);
@@ -75,34 +114,37 @@ function App(){
     acceptingAudioRef.current=false;
     setVoiceState("processing");
     setInput(text);
+
     const nextHistory=[...historyRef.current,{role:"user",text}];
     historyRef.current=nextHistory;
     setConversation(nextHistory);
+
+    const currentLead=leadDraftRef.current;
 
     try{
       const res=await fetch("/api/assistant",{
         method:"POST",
         headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({text,history:nextHistory.slice(0,-1)})
+        body:JSON.stringify({text,history:nextHistory.slice(0,-1),currentLead})
       });
       const data=await res.json();
       if(!res.ok) throw new Error(data.error||"Could not understand that");
+
+      const merged={...emptyLead,...currentLead,...(data.lead||{})};
+      leadDraftRef.current=merged;
+      setLead(merged);
 
       const reply=data.reply||"Got it.";
       const updatedHistory=[...nextHistory,{role:"assistant",text:reply}];
       historyRef.current=updatedHistory;
       setConversation(updatedHistory);
 
-      if(data.lead?.name||data.lead?.phone||data.lead?.property){
-        setLead({...emptyLead,...data.lead});
-      }
-
       await speakReply(reply);
 
       if(!voiceActiveRef.current)return;
 
       if(data.action==="create_lead"){
-        setMessage("Lead ready. Review the details below and save it to OVAM CRM.");
+        setMessage("Lead captured. Review the details below and save it to OVAM CRM.");
         stopVoice();
         return;
       }
@@ -122,6 +164,8 @@ function App(){
     if(voiceState!=="idle") return;
     setMessage("");
     setInput("");
+    setLead(null);
+    leadDraftRef.current=emptyLead;
     historyRef.current=[];
     setConversation([]);
     processingRef.current=false;
@@ -208,7 +252,7 @@ function App(){
           <span className="orb-ring ring-one"></span><span className="orb-ring ring-two"></span><span className="mic">{voiceState==="listening"?"■":"●"}</span>
         </button>
         <strong>{voiceLabel}</strong>
-        {voiceState==="listening"&&<div className="live-meter"><span className="live-dot"></span><span>MIC LIVE</span><div className="meter-bars">{[1,2,3,4,5,6,7].map(i=><i key={i} style={{transform:`scaleY(${Math.max(.18,micLevel*(.55+(i%3)*.18))})`}}/> )}</div><button className="stop-voice" onClick={stopVoice}>Stop recording</button></div>}
+        {voiceState==="listening"&&<div className="live-meter"><span className="live-dot"></span><span>MIC LIVE</span><div className="meter-bars">{[1,2,3,4,5,6,7].map(i=><i key={i} style={{transform:\`scaleY(\${Math.max(.18,micLevel*(.55+(i%3)*.18))})\`}}/> )}</div><button className="stop-voice" onClick={stopVoice}>Stop recording</button></div>}
         {voiceState==="listening"&&input&&<div className="live-transcript">{input}</div>}
         {conversation.length>0&&<div className="voice-conversation">{conversation.map((m,i)=><div key={i} className={m.role}>{m.role==="user"?"You":"OVAM AI"}: {m.text}</div>)}</div>}
         {voiceState==="idle"&&input&&<div className="live-transcript">Review the transcript below, correct anything misheard, then click Understand this lead.</div>}
