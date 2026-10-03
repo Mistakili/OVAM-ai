@@ -122,7 +122,7 @@ function App(){
     const nextHistory=[...historyRef.current,{role:"user",text}];
 
     if(awaitingSaveRef.current){
-      if(/^(yes|yeah|yep|sure|okay|ok|save|save it|go ahead|do it|please do)\b/i.test(text.trim())){
+      if(/^(yes|yeah|yep|sure|okay|ok|save|save it|go ahead|do it|please do|please save)\b/i.test(text.trim())){
         awaitingSaveRef.current=false;
         const savedLead=leadDraftRef.current;
         const next=[{...savedLead,id:Date.now()},...list];
@@ -136,7 +136,39 @@ function App(){
         stopVoice();
         return;
       }
-      if(/^(no|nope|not yet|don't|do not)\b/i.test(text.trim())){
+
+      const declinedSave=/^(no|nope)\\b/i.test(text.trim());
+      const clearlyNeedsMoreInfo=/\\b(still have|other things|something else|more to add|more information|not yet|don't save|do not save)\\b/i.test(text.trim());
+
+      if(declinedSave && clearlyNeedsMoreInfo){
+        awaitingSaveRef.current=false;
+        const followUp="No problem. What else should I add or change?";
+        const updatedHistory=[...historyRef.current,{role:"user",text},{role:"assistant",text:followUp}];
+        historyRef.current=updatedHistory;
+        setConversation(updatedHistory);
+        await speakReply(followUp);
+        if(!voiceActiveRef.current)return;
+        processingRef.current=false;
+        acceptingAudioRef.current=true;
+        setVoiceState("listening");
+        return;
+      }
+
+      if(/^(not yet|don't save|do not save)\\b/i.test(text.trim())){
+        awaitingSaveRef.current=false;
+        const followUp="No problem. What else should I add or change?";
+        const updatedHistory=[...historyRef.current,{role:"user",text},{role:"assistant",text:followUp}];
+        historyRef.current=updatedHistory;
+        setConversation(updatedHistory);
+        await speakReply(followUp);
+        if(!voiceActiveRef.current)return;
+        processingRef.current=false;
+        acceptingAudioRef.current=true;
+        setVoiceState("listening");
+        return;
+      }
+
+      if(declinedSave){
         awaitingSaveRef.current=false;
       }
     }
