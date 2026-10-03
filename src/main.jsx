@@ -15,6 +15,10 @@ function App(){
   const voiceSession=useRef({stream:null,ctx:null,worklet:null,socket:null});
   const transcriptRef=useRef("");
   const processingRef=useRef(false);
+  const acceptingAudioRef=useRef(true);
+  const voiceActiveRef=useRef(false);
+  const historyRef=useRef([]);
+  const [conversation,setConversation]=useState([]);
   const demoLead="I just spoke to Sarah. She wants a residential plot around Akobo, Ibadan. Her budget is about 10 million naira and she wants to buy within the next two months. Her phone number is 08012345678.";
 
   async function extractLead(text=input){
@@ -37,7 +41,24 @@ function App(){
     setInput(""); setLead(null); setMessage("Lead saved to OVAM CRM.");
   }
 
+  function speakReply(text){
+    if(!text||!("speechSynthesis" in window)) return Promise.resolve();
+    return new Promise(resolve=>{
+      window.speechSynthesis.cancel();
+      const utterance=new SpeechSynthesisUtterance(text);
+      utterance.lang="en-NG";
+      utterance.rate=0.98;
+      utterance.onend=resolve;
+      utterance.onerror=resolve;
+      window.speechSynthesis.speak(utterance);
+    });
+  }
+
   function stopVoice(){
+    voiceActiveRef.current=false;
+    acceptingAudioRef.current=false;
+    processingRef.current=false;
+    try{window.speechSynthesis?.cancel()}catch{}
     const s=voiceSession.current;
     try{s.socket?.send(JSON.stringify({type:"Terminate"}))}catch{}
     try{s.socket?.close()}catch{}
@@ -49,9 +70,67 @@ function App(){
     setVoiceState("idle");
   }
 
+  async function handleVoiceTurn(text,socket){
+    if(!text?.trim()||processingRef.current||!voiceActiveRef.current)return;
+    processingRef.current=true;
+    acceptingAudioRef.current=false;
+    setVoiceState("processing");
+    setInput(text);
+    const nextHistory=[...historyRef.current,{role:"user",text}];
+    historyRef.current=nextHistory;
+    setConversation(nextHistory);
+
+    try{
+      const res=await fetch("/api/assistant",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({text,history:nextHistory.slice(0,-1)})
+      });
+      const data=await res.json();
+      if(!res.ok) throw new Error(data.error||"Could not understand that");
+
+      const reply=data.reply||"Got it.";
+      const updatedHistory=[...nextHistory,{role:"assistant",text:reply}];
+      historyRef.current=updatedHistory;
+      setConversation(updatedHistory);
+
+      if(data.lead?.name||data.lead?.phone||data.lead?.property){
+        setLead({...emptyLead,...data.lead});
+      }
+
+      await speakReply(reply);
+
+      if(!voiceActiveRef.current)return;
+
+      if(data.action==="create_lead"){
+        setMessage("Lead ready. Review the details below and save it to OVAM CRM.");
+        stopVoice();
+        return;
+      }
+
+      processingRef.current=false;
+      acceptingAudioRef.current=true;
+      setVoiceState("listening");
+    }catch(e){
+      processingRef.current=false;
+      acceptingAudioRef.current=true;
+      setVoiceState("listening");
+      setMessage(e.message||"I couldn't process that. Try again.");
+    }
+  }
+
   async function startVoice(){
     if(voiceState!=="idle") return;
-    setMessage(""); setInput(""); transcriptRef.current=""; processingRef.current=false; setVoiceState("listening"); setMicLevel(0);
+    setMessage("");
+    setInput("");
+    historyRef.current=[];
+    setConversation([]);
+    processingRef.current=false;
+    acceptingAudioRef.current=true;
+    voiceActiveRef.current=true;
+    setVoiceState("listening");
+    setMicLevel(0);
+
     let stream=null,ctx=null,worklet=null,socket=null;
     try{
       const tokenRes=await fetch("/api/assemblyai-token");
@@ -67,33 +146,35 @@ function App(){
       source.connect(worklet);
       voiceSession.current={stream,ctx,worklet,socket:null};
 
-      socket=new WebSocket("wss://streaming.assemblyai.com/v3/ws?sample_rate=16000&encoding=pcm_s16le&speech_model=universal-3-6-pro&token="+encodeURIComponent(tokenData.token));
+      socket=new WebSocket("wss://streaming.assemblyai.com/v3/ws?sample_rate=16000&encoding=pcm_s16le&speech_model=universal-3-6-pro&min_turn_silence=300&max_turn_silence=2000&token="+encodeURIComponent(tokenData.token));
       voiceSession.current.socket=socket;
 
       worklet.port.onmessage=e=>{
         setMicLevel(e.data.level||0);
-        if(socket.readyState===WebSocket.OPEN) socket.send(e.data.pcm);
+        if(acceptingAudioRef.current&&socket.readyState===WebSocket.OPEN) socket.send(e.data.pcm);
       };
 
       socket.onmessage=event=>{
         const data=JSON.parse(event.data);
-        if(data.type==="Turn" && data.transcript && !processingRef.current){
-          // Display transcription for review. Never submit partial speech to Gemma.
-          transcriptRef.current=data.transcript;
+        if(data.type==="Turn"&&data.transcript){
           setInput(data.transcript);
+          if(data.end_of_turn&&!processingRef.current) handleVoiceTurn(data.transcript,socket);
         }
         if(data.type==="Error"){
           setMessage(data.error||"Transcription failed");
           stopVoice();
         }
       };
-      socket.onerror=()=>{setVoiceState("idle");setMessage("Voice connection failed. Check your AssemblyAI configuration.")};
+      socket.onerror=()=>{setMessage("Voice connection failed. Check your AssemblyAI configuration.");stopVoice()};
       socket.onclose=()=>setMicLevel(0);
     }catch(e){
       try{stream?.getTracks().forEach(t=>t.stop())}catch{}
       await ctx?.close().catch(()=>{});
       voiceSession.current={stream:null,ctx:null,worklet:null,socket:null};
-      setMicLevel(0); setVoiceState("idle"); setMessage(e.message||"Could not start voice input");
+      voiceActiveRef.current=false;
+      setMicLevel(0);
+      setVoiceState("idle");
+      setMessage(e.message||"Could not start voice input");
     }
   }
 
@@ -113,12 +194,13 @@ function App(){
       </div>
 
       <div className={"voice-panel "+voiceState}>
-        <button className={"voice-orb "+(voiceState==="listening"?"live":"")} onClick={voiceState==="listening"?stopVoice:startVoice} disabled={loading||voiceState==="processing"}>
+        <button className={"voice-orb "+(voiceState==="listening"?"live":"")} onClick={voiceState==="idle"?startVoice:stopVoice} disabled={loading}>
           <span className="orb-ring ring-one"></span><span className="orb-ring ring-two"></span><span className="mic">{voiceState==="listening"?"■":"●"}</span>
         </button>
         <strong>{voiceLabel}</strong>
         {voiceState==="listening"&&<div className="live-meter"><span className="live-dot"></span><span>MIC LIVE</span><div className="meter-bars">{[1,2,3,4,5,6,7].map(i=><i key={i} style={{transform:`scaleY(${Math.max(.18,micLevel*(.55+(i%3)*.18))})`}}/> )}</div><button className="stop-voice" onClick={stopVoice}>Stop recording</button></div>}
         {voiceState==="listening"&&input&&<div className="live-transcript">{input}</div>}
+        {conversation.length>0&&<div className="voice-conversation">{conversation.map((m,i)=><div key={i} className={m.role}>{m.role==="user"?"You":"OVAM AI"}: {m.text}</div>)}</div>}
         {voiceState==="idle"&&input&&<div className="live-transcript">Review the transcript below, correct anything misheard, then click Understand this lead.</div>}
         <span>{voiceState==="listening"?"Speak naturally about the prospect.":voiceState==="processing"?"Gemma is structuring the lead.":"Tap the microphone and tell OVAM AI what happened."}</span>
       </div>
