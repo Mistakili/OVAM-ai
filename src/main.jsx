@@ -140,7 +140,7 @@ function App(){
       const tokenRes=await fetch("/api/assemblyai-token");
       const tokenData=await tokenRes.json();
       if(!tokenRes.ok)throw new Error(tokenData.error||"Could not start voice service");
-      const agentId=import.meta.env.VITE_ASSEMBLYAI_AGENT_ID;
+      const agentId=tokenData.agentId;
       if(!agentId)throw new Error("ASSEMBLYAI_AGENT_ID is not configured for this deployment.");
 
       const ctx=new AudioContext({sampleRate:24000});await ctx.resume();
