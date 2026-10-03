@@ -1,63 +1,63 @@
 const emptyLead={name:"",phone:"",property:"",location:"",budget:"",timeline:"",status:"New",notes:""};
 
-const leadSchema={
+const schema={
   type:"object",
   properties:{
-    action:{type:"string",enum:["create_lead","update_lead","no_action"]},
+    action:{type:"string",enum:["create_lead","update_lead","ask_question","no_action"]},
+    reply:{type:"string"},
     lead:{
       type:"object",
       properties:{
-        name:{type:"string"},
-        phone:{type:"string"},
-        property:{type:"string"},
-        location:{type:"string"},
-        budget:{type:"string"},
-        timeline:{type:"string"},
-        status:{type:"string"},
-        notes:{type:"string"}
+        name:{type:"string"},phone:{type:"string"},property:{type:"string"},
+        location:{type:"string"},budget:{type:"string"},timeline:{type:"string"},
+        status:{type:"string"},notes:{type:"string"}
       },
       required:["name","phone","property","location","budget","timeline","status","notes"]
     }
   },
-  required:["action","lead"]
+  required:["action","reply","lead"]
 };
 
-function buildPrompt(text){
-  return `You are OVAM AI, a Nigerian real-estate CRM assistant.
+function buildPrompt(text,history=[]){
+  return `You are OVAM AI, a warm and concise Nigerian real-estate CRM assistant.
 
-Read the user's update and convert it into a CRM action.
+The user is talking to you about prospects. Maintain the conversation and help turn it into a complete CRM lead.
 
-Return a single JSON object matching the supplied schema. Do not write an explanation, bullets, markdown, or commentary.
+Return ONLY one JSON object matching the supplied schema.
 
 Rules:
-- Extract only facts stated or strongly implied.
-- Unknown fields must be empty strings.
-- Never invent names, phone numbers, budgets, locations, or timelines.
-- Use create_lead for a new prospect.
-- Use update_lead when the user clearly describes a change to an existing prospect.
-- Use no_action when there is not enough information to make a CRM change.
-- Keep budget and timeline in natural language.
+- Understand the user's latest message in the context of the conversation history.
+- Extract only facts stated or strongly implied. Never invent information.
+- Keep all previously confirmed lead information unless the user corrects it.
+- If important lead information is missing, use action "ask_question" and ask ONE natural, useful question.
+- Prioritize these fields: name, phone, property, location, budget, timeline.
+- Do not ask for every field at once.
+- If enough information exists to create the lead, use action "create_lead".
+- If the user clearly corrects an existing lead, use "update_lead".
+- If the user is only greeting or chatting without a CRM-relevant update, use "no_action".
+- reply must be what OVAM AI should say aloud. Keep it short and conversational.
+- Unknown lead fields must be empty strings.
 
-User update:
+Conversation so far:
+${history.map(x=>x.role.toUpperCase()+": "+x.text).join("\n")}
+
+Latest user message:
 ${text}`;
 }
 
-function parseModelJson(raw){
-  const cleaned=String(raw||"").trim().replace(/^\`\`\`(?:json)?\s*/i,"").replace(/\s*\`\`\`$/,"");
+function parse(raw){
+  const cleaned=String(raw||"").trim().replace(/^```(?:json)?\s*/i,"").replace(/\s*```$/,"");
   try{return JSON.parse(cleaned)}catch{}
-  const start=cleaned.indexOf("{");
-  const end=cleaned.lastIndexOf("}");
-  if(start!==-1&&end>start){
-    try{return JSON.parse(cleaned.slice(start,end+1))}catch{}
-  }
-  throw new Error("Gemma returned text instead of the expected CRM JSON.");
+  const start=cleaned.indexOf("{"),end=cleaned.lastIndexOf("}");
+  if(start!==-1&&end>start)return JSON.parse(cleaned.slice(start,end+1));
+  throw new Error("Gemma returned invalid CRM JSON.");
 }
 
 export default async function handler(req,res){
   if(req.method!=="POST") return res.status(405).json({error:"Method not allowed"});
   try{
-    const {text}=req.body||{};
-    if(!text?.trim()) return res.status(400).json({error:"Update is required"});
+    const {text,history=[]}=req.body||{};
+    if(!text?.trim()) return res.status(400).json({error:"Message is required"});
     if(!process.env.GEMINI_API_KEY) return res.status(500).json({error:"GEMINI_API_KEY is not configured"});
 
     const model=process.env.GEMMA_MODEL||"gemma-4-26b-a4b-it";
@@ -65,24 +65,19 @@ export default async function handler(req,res){
       method:"POST",
       headers:{"Content-Type":"application/json","x-goog-api-key":process.env.GEMINI_API_KEY},
       body:JSON.stringify({
-        contents:[{parts:[{text:buildPrompt(text)}]}],
-        generationConfig:{
-          responseMimeType:"application/json",
-          responseSchema:leadSchema
-        }
+        contents:[{parts:[{text:buildPrompt(text,history)}]}],
+        generationConfig:{responseMimeType:"application/json",responseSchema:schema}
       })
     });
-
     const rawResponse=await response.text();
     if(!response.ok) throw new Error(`Gemma request failed (${response.status}): ${rawResponse.slice(0,300)}`);
-
     const data=JSON.parse(rawResponse);
     const raw=data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if(!raw) throw new Error("Gemma returned no structured response");
-    const result=parseModelJson(raw);
-
+    if(!raw) throw new Error("Gemma returned no response");
+    const result=parse(raw);
     return res.status(200).json({
       action:result.action||"no_action",
+      reply:result.reply||"",
       lead:{...emptyLead,...(result.lead||{})}
     });
   }catch(error){
