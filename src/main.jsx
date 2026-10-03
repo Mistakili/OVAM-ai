@@ -208,6 +208,9 @@ function App(){
           case"tool.call":
             pendingToolsRef.current.push({call_id:data.call_id,result:runTool(data)});
             break;
+          case"input.speech.stopped":
+            setVoiceState("speaking");
+            break;
           case"reply.done":
             if(data.status==="interrupted"){pendingToolsRef.current=[];stopPlayback();setVoiceState("listening")}
             else{
@@ -216,7 +219,9 @@ function App(){
             }
             break;
           case"session.error":
-            setMessage(data.message||data.code||"Voice session failed");stopVoice();break;
+            setMessage("Voice agent error: "+(data.code||"unknown")+" — "+(data.message||"Unknown session error"));
+            setVoiceState("listening");
+            break;
           case"session.ended":
             if(voiceActiveRef.current)stopVoice();break;
           default:break;
