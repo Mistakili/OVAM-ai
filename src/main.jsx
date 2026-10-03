@@ -236,22 +236,39 @@ function App(){
     setVoiceState("greeting");
     setMicLevel(0);
 
+    const greeting="Hi, I'm OVAM AI. Tell me what happened with the prospect, and I'll capture the details for you.";
+    historyRef.current=[{role:"assistant",text:greeting}];
+    setConversation([{role:"assistant",text:greeting}]);
+
+    // Start the greeting immediately. Voice infrastructure can initialize while OVAM speaks.
+    const greetingPromise=speakReply(greeting);
+
     let stream=null,ctx=null,worklet=null,socket=null;
     try{
-      const tokenRes=await fetch("/api/assemblyai-token");
-      const tokenData=await tokenRes.json();
-      if(!tokenRes.ok) throw new Error(tokenData.error||"Could not start voice service");
+      // These independent startup steps can happen while the greeting is playing.
+      const tokenPromise=fetch("/api/assemblyai-token").then(async res=>{
+        const data=await res.json();
+        if(!res.ok) throw new Error(data.error||"Could not start voice service");
+        return data.token;
+      });
 
       ctx=new AudioContext({sampleRate:16000});
       await ctx.resume();
-      await ctx.audioWorklet.addModule("/pcm-processor.js");
-      stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true,channelCount:1}});
+      const workletPromise=ctx.audioWorklet.addModule("/pcm-processor.js");
+      const streamPromise=navigator.mediaDevices.getUserMedia({
+        audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true,channelCount:1}
+      });
+
+      const [token]=await Promise.all([tokenPromise,workletPromise,streamPromise.then(s=>{stream=s;})]);
+
       worklet=new AudioWorkletNode(ctx,"pcm-processor");
       const source=ctx.createMediaStreamSource(stream);
       source.connect(worklet);
       voiceSession.current={stream,ctx,worklet,socket:null};
 
-      socket=new WebSocket("wss://streaming.assemblyai.com/v3/ws?sample_rate=16000&encoding=pcm_s16le&speech_model=universal-3-6-pro&mode=balanced&token="+encodeURIComponent(tokenData.token));
+      socket=new WebSocket(
+        "wss://streaming.assemblyai.com/v3/ws?sample_rate=16000&encoding=pcm_s16le&speech_model=universal-3-6-pro&mode=balanced&token="+encodeURIComponent(token)
+      );
       voiceSession.current.socket=socket;
 
       worklet.port.onmessage=e=>{
@@ -270,15 +287,28 @@ function App(){
           stopVoice();
         }
       };
-      socket.onerror=()=>{setMessage("Voice connection failed. Check your AssemblyAI configuration.");stopVoice()};
+      socket.onerror=()=>{
+        setMessage("Voice connection failed. Check your AssemblyAI configuration.");
+        stopVoice();
+      };
       socket.onclose=()=>setMicLevel(0);
 
-      const greeting="Hi, I'm OVAM AI. Tell me what happened with the prospect, and I'll capture the details for you.";
-      historyRef.current=[{role:"assistant",text:greeting}];
-      setConversation([{role:"assistant",text:greeting}]);
+      // Wait for AssemblyAI to actually accept the websocket before listening.
+      await new Promise((resolve,reject)=>{
+        const timeout=setTimeout(()=>reject(new Error("Voice connection timed out. Please try again.")),7000);
+        socket.addEventListener("open",()=>{
+          clearTimeout(timeout);
+          resolve();
+        },{once:true});
+        socket.addEventListener("error",()=>{
+          clearTimeout(timeout);
+          reject(new Error("Voice connection failed. Check your AssemblyAI configuration."));
+        },{once:true});
+      });
 
-      await speakReply(greeting);
-
+      // Don't let a slow voice greeting block readiness, but don't capture the user's
+      // speech until both the greeting and AssemblyAI are ready.
+      await greetingPromise;
       if(!voiceActiveRef.current)return;
 
       acceptingAudioRef.current=true;
@@ -288,6 +318,8 @@ function App(){
       await ctx?.close().catch(()=>{});
       voiceSession.current={stream:null,ctx:null,worklet:null,socket:null};
       voiceActiveRef.current=false;
+      acceptingAudioRef.current=false;
+      try{window.speechSynthesis?.cancel()}catch{}
       setMicLevel(0);
       setVoiceState("idle");
       setMessage(e.message||"Could not start voice input");
