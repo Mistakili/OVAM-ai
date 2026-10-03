@@ -197,7 +197,7 @@ function App(){
       const action=data.action==="create_lead"&&!leadReady?"ask_question":data.action;
       let reply=action==="create_lead"?"":(data.reply||"Got it.");
       if(action==="ask_question"&&!reply){
-        if(!merged.phone) reply="What's the best phone number for Cynthia?";
+        if(!merged.phone) reply="What's the best phone number for "+(merged.name||"this prospect")+"?";
         else if(!merged.property&&!merged.location) reply="What kind of property is she interested in, and where?";
         else if(!merged.budget) reply="What's her budget?";
         else if(!merged.timeline) reply="When is she looking to buy?";
