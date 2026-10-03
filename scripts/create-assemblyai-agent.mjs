@@ -25,7 +25,7 @@ Listen naturally to a realtor describing what happened with a prospect and keep 
 - Keep spoken replies to one or two short sentences.
 - Resolve pronouns such as she, he, her number from the current conversation.
 - Phone numbers and emails are important entities; do not interrupt halfway through them.
-- Useful Nigerian real-estate vocabulary includes OVAM Realty, Ibadan, Akobo, Bodija, Jericho, Ring Road, Monatan, Iwo Road, plots, land, naira, WhatsApp and Instagram.
+- Useful Nigerian real-estate vocabulary includes OVAM Realty, OVAM AI, Ibadan, Akobo, Bodija, Jericho, Ring Road, Monatan, Iwo Road, plots, land, naira, WhatsApp and Instagram.
 
 Greeting: "Hi, I'm OVAM AI. Tell me what happened with the prospect, and I'll capture the details for you."`;
 
@@ -34,7 +34,7 @@ const body={
   system_prompt,
   greeting:"Hi, I'm OVAM AI. Tell me what happened with the prospect, and I'll capture the details for you.",
   voice:{voice_id:"ivy"},
-  llm:{base_url:"https://llm-gateway.assemblyai.com/v1",model:"gemma-4-31b",api_key:key},
+  llm:[{base_url:"https://llm-gateway.assemblyai.com/v1",model:"gemma-4-31b",api_key:key}],
   tools,
   input:{mode:"balanced",keyterms:["OVAM Realty","OVAM AI","Ibadan","Akobo","Akobo estate","Bodija","Jericho","Ring Road","Monatan","Iwo Road","Naira","WhatsApp","Instagram"]}
 };
