@@ -50,11 +50,12 @@ VOICE:
 - Do not dump multiple questions into one turn.
 - Never claim something was saved unless save_lead confirms it.`;
 
+const useManagedLLM=process.env.OVAM_LLM_MODE==="managed";
 const body={
  name:"OVAM AI",
  system_prompt,
  greeting:"Hi, I'm OVAM AI. Tell me what happened with the prospect, and I'll capture the details for you.",
- llm:[{base_url:"https://llm-gateway.assemblyai.com/v1",model:"gemma-4-31b",api_key:key}],
+ ...(useManagedLLM?{}:{llm:[{base_url:"https://llm-gateway.assemblyai.com/v1",model:"gemma-4-31b",api_key:key}]}),
  tools,
  input:{transcription_mode:"balanced",voice_focus:"near-field",keyterms:["OVAM Realty","OVAM AI","Ibadan","Akobo","Akobo estate","Bodija","Jericho","Ring Road","Monatan","Iwo Road","Naira","WhatsApp","Instagram"]}
 };
@@ -63,4 +64,5 @@ const r=await fetch("https://agents.assemblyai.com/v1/agents/"+encodeURIComponen
 const data=await r.json();
 if(!r.ok)throw new Error(JSON.stringify(data));
 console.log("OVAM AI agent updated:",data.id||agentId);
+console.log("LLM mode:",useManagedLLM?"AssemblyAI managed":"Gemma 4 31B via AssemblyAI LLM Gateway");
 console.log("Input:",JSON.stringify(data.input||{}));
