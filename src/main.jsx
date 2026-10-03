@@ -2,7 +2,9 @@ import React,{useRef,useState} from "react";
 import {createRoot} from "react-dom/client";
 import "./styles.css";
 
-const emptyLead={name:"",phone:"",property:"",location:"",budget:"",timeline:"",status:"New",notes:""};
+const emptyLead={name:"",phone:"",email:"",property:"",location:"",budget:"",dealPrice:"",deposit:"",paymentPlan:"",paymentFrequency:"",amountPaid:"",balance:"",timeline:"",nextFollowUp:"",nextAction:"",status:"New",source:"",preferredContact:"",objections:"",notes:""};
+
+const fieldLabels={name:"Name",phone:"Phone",email:"Email",property:"Property",location:"Location",budget:"Budget",dealPrice:"Deal price",deposit:"Deposit",paymentPlan:"Payment plan",paymentFrequency:"Payment frequency",amountPaid:"Amount paid",balance:"Balance",timeline:"Purchase timeline",nextFollowUp:"Next follow-up",nextAction:"Next action",status:"Status",source:"Lead source",preferredContact:"Preferred contact",objections:"Objections",notes:"Notes"};
 
 function App(){
   const [input,setInput]=useState("");
@@ -19,7 +21,7 @@ function App(){
   const historyRef=useRef([]);
   const leadDraftRef=useRef(emptyLead);
   const [conversation,setConversation]=useState([]);
-  const demoLead="I just spoke to Sarah. She wants a residential plot around Akobo, Ibadan. Her budget is about 10 million naira and she wants to buy within the next two months. Her phone number is 08012345678.";
+  const demoLead="I just spoke to Sarah. She wants a residential plot around Akobo, Ibadan for about 10 million naira. She can pay 3 million down and spread the balance over 12 months. She wants to buy within two months, and I should call her next Friday. She came from Instagram and prefers WhatsApp.";
 
   async function extractLead(text=input){
     if(!text.trim()) return;
@@ -270,7 +272,7 @@ function App(){
     {lead&&<section className="lead-card card">
       <div className="lead-head"><div><span className="kicker">AI CAPTURED</span><h2>{lead.name||"New prospect"}</h2><p>{lead.property||"Property interest"}{lead.location?" · "+lead.location:""}</p></div><span className="status">{lead.status||"New"}</span></div>
       <div className="lead-grid">
-        {Object.entries(lead).map(([key,value])=><label key={key}><span>{key}</span><input value={value||""} onChange={e=>setLead({...lead,[key]:e.target.value})}/></label>)}
+        {Object.entries(lead).map(([key,value])=><label key={key}><span>{fieldLabels[key]||key}</span><input value={value||""} onChange={e=>setLead({...lead,[key]:e.target.value})}/></label>)}
       </div>
       <div className="lead-actions"><button className="save" onClick={saveLead}>Save to OVAM CRM</button><button className="secondary" onClick={()=>setLead(null)}>Edit later</button></div>
     </section>}
