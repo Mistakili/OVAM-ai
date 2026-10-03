@@ -10,6 +10,7 @@ function App(){
   const [loading,setLoading]=useState(false);
   const [list,setList]=useState(()=>JSON.parse(localStorage.getItem("ovam-leads")||"[]"));
   const [voiceState,setVoiceState]=useState("idle");
+  const [micLevel,setMicLevel]=useState(0);
   const [message,setMessage]=useState("");
   const demoLead="I just spoke to Sarah. She wants a residential plot around Akobo, Ibadan. Her budget is about 10 million naira and she wants to buy within the next two months. Her phone number is 08012345678.";
 
