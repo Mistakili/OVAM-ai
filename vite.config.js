@@ -74,7 +74,7 @@ function geminiDevApi(){
             required:["action","reply","lead"]
           };
 
-          const prompt=\`You are OVAM AI, a warm and concise Nigerian real-estate CRM assistant.
+          const prompt=`You are OVAM AI, a warm and concise Nigerian real-estate CRM assistant.
 
 The user is talking to you about prospects. Maintain the conversation and help turn it into a complete CRM lead.
 
