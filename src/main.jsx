@@ -34,19 +34,54 @@ function App(){
     setInput(""); setLead(null); setMessage("Lead saved to OVAM CRM.");
   }
 
-  function startVoice(){
-    const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
-    if(!SpeechRecognition){setMessage("Voice input is not supported in this browser. You can still type the lead.");return;}
-    const recognition=new SpeechRecognition();
-    recognition.lang="en-NG"; recognition.interimResults=false; recognition.maxAlternatives=1;
-    setMessage(""); setVoiceState("listening");
-    recognition.onresult=e=>{
-      const text=e.results[0][0].transcript;
-      setInput(text); setVoiceState("processing"); extractLead(text);
-    };
-    recognition.onerror=e=>{setVoiceState("idle");setMessage("Voice input stopped: "+e.error)};
-    recognition.onend=()=>setVoiceState(current=>current==="listening"?"idle":current);
-    recognition.start();
+  async function startVoice(){
+    if(voiceState==="listening") return;
+    setMessage(""); setVoiceState("listening"); setMicLevel(0);
+    let stream=null,ctx=null,worklet=null,socket=null;
+    try{
+      const tokenRes=await fetch("/api/assemblyai-token");
+      const tokenData=await tokenRes.json();
+      if(!tokenRes.ok) throw new Error(tokenData.error||"Could not start voice service");
+
+      ctx=new AudioContext({sampleRate:16000});
+      await ctx.resume();
+      await ctx.audioWorklet.addModule("/pcm-processor.js");
+      stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true,channelCount:1}});
+      worklet=new AudioWorkletNode(ctx,"pcm-processor");
+      const source=ctx.createMediaStreamSource(stream);
+      source.connect(worklet);
+
+      socket=new WebSocket("wss://streaming.assemblyai.com/v3/ws?sample_rate=16000&encoding=pcm_s16le&speech_model=universal-3-6-pro&token="+encodeURIComponent(tokenData.token));
+
+      worklet.port.onmessage=e=>{
+        setMicLevel(e.data.level||0);
+        if(socket.readyState===WebSocket.OPEN) socket.send(e.data.pcm);
+      };
+
+      socket.onmessage=async event=>{
+        const data=JSON.parse(event.data);
+        if(data.type==="Turn" && data.transcript){
+          setInput(data.transcript);
+          if(data.end_of_turn){
+            setVoiceState("processing");
+            try{await extractLead(data.transcript)}
+            finally{
+              setVoiceState("idle");
+              stream?.getTracks().forEach(t=>t.stop());
+              await ctx?.close().catch(()=>{});
+              setMicLevel(0);
+            }
+            try{socket.send(JSON.stringify({type:"Terminate"}))}catch{}
+          }
+        }
+      };
+      socket.onerror=()=>{setVoiceState("idle");setMessage("Voice connection failed. Check your AssemblyAI configuration.")};
+      socket.onclose=()=>setMicLevel(0);
+    }catch(e){
+      stream?.getTracks().forEach(t=>t.stop());
+      await ctx?.close().catch(()=>{});
+      setMicLevel(0); setVoiceState("idle"); setMessage(e.message||"Could not start voice input");
+    }
   }
 
   const voiceLabel=voiceState==="listening"?"Listening…":voiceState==="processing"?"Understanding…":"Talk to OVAM AI";
