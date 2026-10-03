@@ -137,7 +137,17 @@ function App(){
     playbackCursorRef.current=0;voiceActiveRef.current=true;sessionReadyRef.current=false;
     setVoiceState("connecting");setMicLevel(0);
     try{
-      const tokenRes=await fetch("/api/assemblyai-token",{cache:"no-store"});
+      const tokenController=new AbortController();
+      const tokenTimeout=setTimeout(()=>tokenController.abort(),10000);
+      let tokenRes;
+      try{
+        tokenRes=await fetch("/api/assemblyai-token",{cache:"no-store",signal:tokenController.signal});
+      }catch(error){
+        if(error?.name==="AbortError")throw new Error("Voice token request timed out. The voice backend is not responding.");
+        throw new Error("Could not reach the voice backend: "+(error?.message||"network error"));
+      }finally{
+        clearTimeout(tokenTimeout);
+      }
       const tokenText=await tokenRes.text();
       let tokenData={};
       try{tokenData=tokenText?JSON.parse(tokenText):{}}catch{throw new Error("Voice token endpoint returned invalid JSON: "+tokenText.slice(0,180))};
@@ -147,7 +157,16 @@ function App(){
 
       const ctx=new AudioContext({sampleRate:24000});await ctx.resume();
       await ctx.audioWorklet.addModule("/pcm-processor.js");
-      const stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true,channelCount:1}});
+      if(!navigator.mediaDevices?.getUserMedia)throw new Error("This browser does not allow microphone access here. Use HTTPS or localhost.");
+      let stream;
+      try{
+        stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true,channelCount:1}});
+      }catch(error){
+        if(error?.name==="NotAllowedError"||error?.name==="PermissionDeniedError")throw new Error("Microphone permission was blocked. Allow microphone access for this site, then tap the mic again.");
+        if(error?.name==="NotFoundError")throw new Error("No microphone was found. Connect a microphone and try again.");
+        if(error?.name==="NotReadableError")throw new Error("The microphone is busy or unavailable. Close other apps using it and try again.");
+        throw new Error("Could not access the microphone: "+(error?.message||error?.name||"unknown error"));
+      }
       const worklet=new AudioWorkletNode(ctx,"pcm-processor");
       const source=ctx.createMediaStreamSource(stream);source.connect(worklet);
       const socket=new WebSocket("wss://agents.assemblyai.com/v1/ws?token="+encodeURIComponent(tokenData.token));
@@ -238,9 +257,20 @@ Do not use the example as actual lead data.`,
           default:break;
         }
       };
-      socket.onerror=()=>{setMessage("Voice connection failed. Check your AssemblyAI configuration.");stopVoice()};
-      socket.onclose=()=>{if(voiceActiveRef.current){voiceActiveRef.current=false;setVoiceState("idle");setMicLevel(0)}};
+      socket.onerror=()=>{setMessage("AssemblyAI voice connection failed. Check the token/agent configuration.");};
+      socket.onclose=event=>{
+        if(voiceActiveRef.current){
+          voiceActiveRef.current=false;
+          sessionReadyRef.current=false;
+          setVoiceState("idle");
+          setMicLevel(0);
+          if(event.code!==1000){
+            setMessage("Voice connection closed before the session became ready (code "+event.code+"). Tap the mic again for a fresh token.");
+          }
+        }
+      };
     }catch(e){
+      try{voiceSession.current.socket?.close()}catch{}
       try{voiceSession.current.stream?.getTracks().forEach(t=>t.stop())}catch{}
       try{voiceSession.current.ctx?.close()}catch{}
       voiceActiveRef.current=false;sessionReadyRef.current=false;setVoiceState("idle");setMicLevel(0);
