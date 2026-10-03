@@ -24,23 +24,28 @@ function geminiDevApi(){
             return res.end(JSON.stringify({error:"GEMINI_API_KEY is not configured"}));
           }
 
-          const prompt=`You are OVAM AI, a Nigerian real-estate CRM assistant.
-Understand the user's natural update and decide what CRM action should happen.
+          const leadSchema={
+            type:"object",
+            properties:{
+              action:{type:"string",enum:["create_lead","update_lead","no_action"]},
+              lead:{
+                type:"object",
+                properties:{
+                  name:{type:"string"},phone:{type:"string"},property:{type:"string"},
+                  location:{type:"string"},budget:{type:"string"},timeline:{type:"string"},
+                  status:{type:"string"},notes:{type:"string"}
+                },
+                required:["name","phone","property","location","budget","timeline","status","notes"]
+              }
+            },
+            required:["action","lead"]
+          };
 
-Return ONLY valid JSON with exactly:
-{
-  "action": "create_lead" | "update_lead" | "no_action",
-  "lead": {
-    "name": "",
-    "phone": "",
-    "property": "",
-    "location": "",
-    "budget": "",
-    "timeline": "",
-    "status": "New",
-    "notes": ""
-  }
-}
+          const prompt=`You are OVAM AI, a Nigerian real-estate CRM assistant.
+
+Read the user's update and convert it into a CRM action.
+
+Return a single JSON object matching the supplied schema. Do not write an explanation, bullets, markdown, or commentary.
 
 Rules:
 - Extract only facts stated or strongly implied.
@@ -50,7 +55,6 @@ Rules:
 - Use update_lead when the user clearly describes a change to an existing prospect.
 - Use no_action when there is not enough information to make a CRM change.
 - Keep budget and timeline in natural language.
-- Return JSON only.
 
 User update:
 ${text}`;
@@ -60,7 +64,7 @@ ${text}`;
             headers:{"Content-Type":"application/json","x-goog-api-key":apiKey},
             body:JSON.stringify({
               contents:[{parts:[{text:prompt}]}],
-              generationConfig:{responseMimeType:"application/json"}
+              generationConfig:{responseMimeType:"application/json",responseSchema:leadSchema}
             })
           });
 
@@ -69,9 +73,16 @@ ${text}`;
           const data=JSON.parse(rawText);
           const raw=data?.candidates?.[0]?.content?.parts?.[0]?.text;
           if(!raw) throw new Error("Gemma returned no structured response");
-          const result=JSON.parse(raw);
-          const emptyLead={name:"",phone:"",property:"",location:"",budget:"",timeline:"",status:"New",notes:""};
 
+          const cleaned=String(raw).trim().replace(/^\`\`\`(?:json)?\s*/i,"").replace(/\s*\`\`\`$/,"");
+          let result;
+          try{result=JSON.parse(cleaned)}catch{
+            const start=cleaned.indexOf("{"),end=cleaned.lastIndexOf("}");
+            if(start===-1||end<=start) throw new Error("Gemma returned text instead of the expected CRM JSON.");
+            result=JSON.parse(cleaned.slice(start,end+1));
+          }
+
+          const emptyLead={name:"",phone:"",property:"",location:"",budget:"",timeline:"",status:"New",notes:""};
           res.statusCode=200; res.setHeader("Content-Type","application/json");
           res.end(JSON.stringify({action:result.action||"no_action",lead:{...emptyLead,...(result.lead||{})}}));
         }catch(error){
