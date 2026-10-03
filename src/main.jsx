@@ -13,9 +13,8 @@ function App(){
   const [micLevel,setMicLevel]=useState(0);
   const [message,setMessage]=useState("");
   const voiceSession=useRef({stream:null,ctx:null,worklet:null,socket:null});
-  const transcriptRef=useRef("");
   const processingRef=useRef(false);
-  const acceptingAudioRef=useRef(true);
+  const acceptingAudioRef=useRef(false);
   const voiceActiveRef=useRef(false);
   const historyRef=useRef([]);
   const [conversation,setConversation]=useState([]);
@@ -70,7 +69,7 @@ function App(){
     setVoiceState("idle");
   }
 
-  async function handleVoiceTurn(text,socket){
+  async function handleVoiceTurn(text){
     if(!text?.trim()||processingRef.current||!voiceActiveRef.current)return;
     processingRef.current=true;
     acceptingAudioRef.current=false;
@@ -126,9 +125,9 @@ function App(){
     historyRef.current=[];
     setConversation([]);
     processingRef.current=false;
-    acceptingAudioRef.current=true;
+    acceptingAudioRef.current=false;
     voiceActiveRef.current=true;
-    setVoiceState("listening");
+    setVoiceState("greeting");
     setMicLevel(0);
 
     let stream=null,ctx=null,worklet=null,socket=null;
@@ -158,7 +157,7 @@ function App(){
         const data=JSON.parse(event.data);
         if(data.type==="Turn"&&data.transcript){
           setInput(data.transcript);
-          if(data.end_of_turn&&!processingRef.current) handleVoiceTurn(data.transcript,socket);
+          if(data.end_of_turn&&!processingRef.current) handleVoiceTurn(data.transcript);
         }
         if(data.type==="Error"){
           setMessage(data.error||"Transcription failed");
@@ -167,6 +166,17 @@ function App(){
       };
       socket.onerror=()=>{setMessage("Voice connection failed. Check your AssemblyAI configuration.");stopVoice()};
       socket.onclose=()=>setMicLevel(0);
+
+      const greeting="Hi, I'm OVAM AI. Tell me what happened with the prospect, and I'll capture the details for you.";
+      historyRef.current=[{role:"assistant",text:greeting}];
+      setConversation([{role:"assistant",text:greeting}]);
+
+      await speakReply(greeting);
+
+      if(!voiceActiveRef.current)return;
+
+      acceptingAudioRef.current=true;
+      setVoiceState("listening");
     }catch(e){
       try{stream?.getTracks().forEach(t=>t.stop())}catch{}
       await ctx?.close().catch(()=>{});
@@ -178,7 +188,7 @@ function App(){
     }
   }
 
-  const voiceLabel=voiceState==="listening"?"Listening…":voiceState==="processing"?"Understanding…":"Talk to OVAM AI";
+  const voiceLabel=voiceState==="listening"?"Listening…":voiceState==="processing"?"Understanding…":voiceState==="greeting"?"Hello…":"Talk to OVAM AI";
 
   return <main className="shell">
     <header className="topbar">
@@ -202,7 +212,7 @@ function App(){
         {voiceState==="listening"&&input&&<div className="live-transcript">{input}</div>}
         {conversation.length>0&&<div className="voice-conversation">{conversation.map((m,i)=><div key={i} className={m.role}>{m.role==="user"?"You":"OVAM AI"}: {m.text}</div>)}</div>}
         {voiceState==="idle"&&input&&<div className="live-transcript">Review the transcript below, correct anything misheard, then click Understand this lead.</div>}
-        <span>{voiceState==="listening"?"Speak naturally about the prospect.":voiceState==="processing"?"Gemma is structuring the lead.":"Tap the microphone and tell OVAM AI what happened."}</span>
+        <span>{voiceState==="listening"?"Speak naturally about the prospect.":voiceState==="processing"?"Gemma is structuring the lead.":voiceState==="greeting"?"OVAM AI is greeting you.":"Tap the microphone and tell OVAM AI what happened."}</span>
       </div>
 
       <div className="text-fallback">
