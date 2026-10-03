@@ -40,7 +40,7 @@ function App(){
     setLoading(true);setMessage("");
     try{
       const res=await fetch("/api/assistant",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text,currentLead:leadDraftRef.current})});
-      const data=await res.json();if(!res.ok)throw new Error(data.error||"Could not process update");
+      const raw=await res.text();let data={};try{data=raw?JSON.parse(raw):{}}catch{throw new Error("CRM endpoint returned invalid JSON: "+raw.slice(0,180))}if(!res.ok)throw new Error(data.error||"Could not process update");
       const merged={...emptyLead,...leadDraftRef.current,...(data.lead||{})};
       leadDraftRef.current=merged;setLead(merged);
     }catch(e){setMessage(e.message||"Something went wrong")}finally{setLoading(false)}
@@ -137,8 +137,10 @@ function App(){
     playbackCursorRef.current=0;voiceActiveRef.current=true;sessionReadyRef.current=false;
     setVoiceState("connecting");setMicLevel(0);
     try{
-      const tokenRes=await fetch("/api/assemblyai-token");
-      const tokenData=await tokenRes.json();
+      const tokenRes=await fetch("/api/assemblyai-token",{cache:"no-store"});
+      const tokenText=await tokenRes.text();
+      let tokenData={};
+      try{tokenData=tokenText?JSON.parse(tokenText):{}}catch{throw new Error("Voice token endpoint returned invalid JSON: "+tokenText.slice(0,180))};
       if(!tokenRes.ok)throw new Error(tokenData.error||"Could not start voice service");
       const agentId=tokenData.agentId;
       if(!agentId)throw new Error("ASSEMBLYAI_AGENT_ID is not configured for this deployment.");
