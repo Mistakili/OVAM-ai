@@ -10,6 +10,6 @@ export default async function handler(req,res){
     const r=await fetch(url,{headers:{Authorization:"Bearer "+key}});
     const data=await r.json();
     if(!r.ok) return res.status(r.status).json({error:data?.error||"Voice token request failed"});
-    return res.status(200).json({token:data.token,agentId:null});
+    return res.status(200).json({token:data.token,agentId});
   }catch(error){return res.status(500).json({error:error.message||"Voice token service failed"});}
 }
