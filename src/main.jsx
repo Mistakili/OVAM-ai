@@ -92,20 +92,6 @@ function App(){
     });
   }
 
-  async function processVoiceWithGemma(text){
-    if(!text?.trim())return;
-    try{
-      const history=conversation.map(x=>({role:x.role,text:x.text}));
-      const res=await fetch("/api/assistant",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text,history,currentLead:leadDraftRef.current})});
-      const raw=await res.text();
-      let data={};try{data=raw?JSON.parse(raw):{}}catch{return}
-      if(!res.ok)return;
-      const merged={...emptyLead,...leadDraftRef.current,...(data.lead||{})};
-      leadDraftRef.current=merged;
-      if(Object.values(merged).some(v=>String(v||"").trim()!==""&&v!=="New"))setLead(merged);
-    }catch{}
-  }
-
   function runTool(call){
     const args=call.arguments||{};
     if(call.name==="update_lead"){
@@ -226,7 +212,7 @@ function App(){
           case"transcript.user.delta":
             setInput(data.text||"");break;
           case"transcript.user":
-            if(data.text){setInput(data.text);addConversation("user",data.text);processVoiceWithGemma(data.text)}break;
+            if(data.text){setInput(data.text);addConversation("user",data.text)}break;
           case"reply.started":
             setVoiceState("speaking");break;
           case"reply.audio":
@@ -236,7 +222,7 @@ function App(){
             if(!data.interrupted)setVoiceState("speaking");
             break;
           case"tool.call":
-            pendingToolsRef.current.push({call_id:data.call_id,result:runTool(data)});
+            const result=runTool(data); try{if(socket.readyState===WebSocket.OPEN)socket.send(JSON.stringify({type:"tool.result",call_id:data.call_id,result:JSON.stringify(result)}))}catch{}
             break;
           case"input.speech.stopped":
             setVoiceState("listening");
