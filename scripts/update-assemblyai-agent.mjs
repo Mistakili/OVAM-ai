@@ -50,7 +50,7 @@ VOICE:
 - Do not dump multiple questions into one turn.
 - Never claim something was saved unless save_lead confirms it.`;
 
-const useManagedLLM=process.env.OVAM_LLM_MODE==="managed";
+const useManagedLLM=true;
 const body={
  name:"OVAM AI",
  system_prompt,
