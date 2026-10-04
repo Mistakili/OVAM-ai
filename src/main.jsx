@@ -190,11 +190,8 @@ function App(){
         const session=agentId?{agent_id:agentId}:{
           system_prompt:OVAM_SYSTEM_PROMPT,
           greeting:"Hi, I'm OVAM AI. Tell me what happened with the prospect, and I'll capture the details for you.",
-          output:{voice:"anna"},
-          tools:OVAM_TOOLS,
-          input:{transcription_mode:"balanced",voice_focus:"near-field",keyterms:["OVAM Realty","OVAM AI","Ibadan","Akobo","Akobo estate","Bodija","Jericho","Ring Road","Monatan","Iwo Road","Naira","WhatsApp","Instagram"]}
+          output:{voice:"anna"}
         };
-        if(!agentId)session.tools=OVAM_TOOLS;
         socket.send(JSON.stringify({type:"session.update",session}));
       };
 
