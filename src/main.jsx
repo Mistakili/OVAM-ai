@@ -222,7 +222,7 @@ function App(){
             if(!data.interrupted)setVoiceState("speaking");
             break;
           case"tool.call":
-            const result=runTool(data); try{if(socket.readyState===WebSocket.OPEN)socket.send(JSON.stringify({type:"tool.result",call_id:data.call_id,result:JSON.stringify(result)}))}catch{}
+            pendingToolsRef.current.push({call_id:data.call_id,result:runTool(data)});
             break;
           case"input.speech.stopped":
             setVoiceState("listening");
@@ -230,6 +230,7 @@ function App(){
           case"reply.done":
             if(data.status==="interrupted"){pendingToolsRef.current=[];stopPlayback();setVoiceState("listening")}
             else{
+              sendPendingTools();
               sendPendingTools();
               if(voiceActiveRef.current)setVoiceState("listening");
             }
