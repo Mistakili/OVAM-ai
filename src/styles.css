@@ -3,3 +3,12 @@
 .voice-orb.live{background:#f4efe4;box-shadow:0 0 0 8px rgba(214,91,74,.08),0 12px 40px rgba(0,0,0,.3)}
 
 .voice-conversation{width:min(650px,100%);margin-top:14px;display:grid;gap:6px;text-align:left;font-size:12px;line-height:1.45}.voice-conversation div{padding:8px 11px;border-radius:10px;background:rgba(255,255,255,.04);color:#aaa69e}.voice-conversation .assistant{color:#d8cfbd;background:rgba(205,187,142,.08)}
+.voice-panel{width:100%;max-width:100%;min-width:0}.voice-reply{width:auto;max-width:100%;min-width:0;margin:18px 0 0;font-size:32px;line-height:1.22;letter-spacing:-.035em;font-weight:650;color:#f6f1e6;overflow-wrap:break-word}
+.voice-panel strong{font-size:14px;font-weight:700;color:#b9b4aa}
+.fact-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:18px}
+.fact-chip{max-width:100%;background:#f4efe4;border:1px solid #e4ddcf;border-radius:999px;padding:8px 12px;font-size:14px;font-weight:750;color:#24221f;overflow-wrap:anywhere}
+.fact-missing{border:1px dashed #c8b48a;background:#fbf7ef;color:#7a6240;border-radius:999px;padding:8px 12px;font-size:13px;font-weight:800}
+.fact-missing.ready{border-style:solid;background:#eaf4ee;color:#246743;border-color:#cfe3d6}
+.record-toggle{margin-top:16px}
+.ai-pill.voice .pulse-dot{background:#8d6a2f;box-shadow:0 0 0 5px rgba(141,106,47,.12)}
+@media(max-width:560px){.topbar{flex-wrap:wrap;gap:12px}.hero,.hero-copy,.text-fallback{max-width:100%}.hero-copy p,.voice-reply,.live-transcript{max-width:100%}.voice-reply{font-size:24px}.fallback-label{flex-wrap:wrap;gap:8px}.ai-pill{max-width:100%}}

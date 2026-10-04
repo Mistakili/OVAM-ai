@@ -34,7 +34,7 @@ const body={
   system_prompt,
   greeting:"Hi, I'm OVAM AI. Tell me what happened with the prospect, and I'll capture the details for you.",
   voice:{voice_id:"anna"},
-  llm:[{base_url:"https://llm-gateway.assemblyai.com/v1",model:"gemma-4-31b",api_key:key}],
+  llm:[],
   tools,
   input:{transcription_mode:"balanced",voice_focus:"near-field",keyterms:["OVAM Realty","OVAM AI","Ibadan","Akobo","Akobo estate","Bodija","Jericho","Ring Road","Monatan","Iwo Road","Naira","WhatsApp","Instagram"]}
 };

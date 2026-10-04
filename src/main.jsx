@@ -9,6 +9,16 @@ const OVAM_TOOLS=[
  {type:"function",name:"save_lead",description:"Save the current lead to OVAM CRM only after the realtor explicitly confirms that they want it saved.",parameters:{type:"object",properties:{},additionalProperties:false}}
 ];
 const fieldLabels={name:"Name",phone:"Phone",email:"Email",property:"Property",location:"Location",budget:"Budget",dealPrice:"Deal price",deposit:"Deposit",paymentPlan:"Payment plan",paymentFrequency:"Payment frequency",amountPaid:"Amount paid",balance:"Balance",timeline:"Purchase timeline",nextFollowUp:"Next follow-up",nextAction:"Next action",status:"Status",source:"Lead source",preferredContact:"Preferred contact",objections:"Objections",notes:"Notes"};
+const gapOrder=["name","phone","property","location","budget","timeline","nextFollowUp"];
+function factChips(lead){
+  if(!lead)return [];
+  return Object.keys(fieldLabels).filter(key=>key!=="status"&&String(lead[key]||"").trim()).map(key=>({key,value:String(lead[key]).trim()}));
+}
+function missingFact(lead){
+  if(!lead)return "";
+  const key=gapOrder.find(key=>!String(lead[key]||"").trim());
+  return key?fieldLabels[key]:"";
+}
 
 function bytesToBase64(buffer){
   const bytes=new Uint8Array(buffer);let binary="";
@@ -31,7 +41,8 @@ function App(){
   const [micLevel,setMicLevel]=useState(0);
   const [message,setMessage]=useState("");
   const [conversation,setConversation]=useState([]);
-  const [lastVoiceEvent,setLastVoiceEvent]=useState("");
+  const [latestReply,setLatestReply]=useState("");
+  const [showRecord,setShowRecord]=useState(false);
   const voiceSession=useRef({stream:null,ctx:null,worklet:null,source:null,socket:null});
   const voiceActiveRef=useRef(false);
   const sessionReadyRef=useRef(false);
@@ -39,6 +50,7 @@ function App(){
   const pendingToolsRef=useRef([]);
   const playbackSourcesRef=useRef(new Set());
   const playbackCursorRef=useRef(0);
+  const replyWordsRef=useRef("");
   const demoLead="I just spoke to Sarah. She wants a residential plot around Akobo, Ibadan for about 10 million naira. She can pay 3 million down and spread the balance over 12 months. She wants to buy within two months, and I should call her next Friday. She came from Instagram and prefers WhatsApp.";
 
   async function extractLead(text=input){
@@ -138,7 +150,7 @@ function App(){
 
   async function startVoice(){
     if(voiceState!=="idle")return;
-    setMessage("");setInput("");setLead(null);setConversation([]);setLastVoiceEvent("");
+    setMessage("");setInput("");setLead(null);setConversation([]);setLatestReply("");setShowRecord(false);
     leadDraftRef.current={...emptyLead};pendingToolsRef.current=[];
     playbackCursorRef.current=0;voiceActiveRef.current=true;sessionReadyRef.current=false;
     setVoiceState("connecting");setMicLevel(0);
@@ -197,7 +209,6 @@ function App(){
 
       socket.onmessage=event=>{
         let data;try{data=JSON.parse(event.data)}catch{return}
-        setLastVoiceEvent(data.type||"unknown");
         console.log("[OVAM AI voice]",data);
         switch(data.type){
           case"session.ready":
@@ -212,11 +223,18 @@ function App(){
             if(data.text){setInput(data.text);addConversation("user",data.text)}
             break;
           case"reply.started":
+            replyWordsRef.current="";
             setVoiceState("speaking");break;
           case"reply.audio":
             playReplyAudio(data.data);break;
+          case"transcript.agent.delta":
+            if(data.delta){
+              replyWordsRef.current=(replyWordsRef.current?replyWordsRef.current+" ":"")+String(data.delta).trim();
+              setLatestReply(replyWordsRef.current);
+            }
+            break;
           case"transcript.agent":
-            if(data.text)addConversation("assistant",data.text);
+            if(data.text){setLatestReply(data.text);addConversation("assistant",data.text)}
             if(!data.interrupted)setVoiceState("speaking");
             break;
           case"tool.call":
@@ -225,10 +243,13 @@ function App(){
           case"input.speech.stopped":
             setVoiceState("listening");
             break;
+          case"reply.error":
+            setMessage("OVAM AI could not answer: "+(data.message||data.code||"the language model failed"));
+            if(voiceActiveRef.current)setVoiceState("listening");
+            break;
           case"reply.done":
             if(data.status==="interrupted"){pendingToolsRef.current=[];stopPlayback();setVoiceState("listening")}
             else{
-              sendPendingTools();
               sendPendingTools();
               if(voiceActiveRef.current)setVoiceState("listening");
             }
@@ -270,7 +291,7 @@ function App(){
   return <main className="shell">
     <header className="topbar">
       <div className="brand"><span className="eyebrow">OVAM REALTY</span><h1>OVAM AI</h1><p>Your real-estate assistant.</p></div>
-      <div className="ai-pill"><span className="pulse-dot"></span> Gemma-powered</div>
+      <div className={"ai-pill"+(voiceState==="idle"?" gemma":" voice")}><span className="pulse-dot"></span>{voiceState==="idle"?"Typed leads · Gemma":"Voice · Gemma"}</div>
     </header>
 
     <section className="hero">
@@ -280,11 +301,12 @@ function App(){
         <button className={"voice-orb "+(voiceState==="listening"||voiceState==="speaking"?"live":"")} onClick={voiceState==="idle"?startVoice:stopVoice} disabled={loading||voiceState==="connecting"}>
           <span className="orb-ring ring-one"></span><span className="orb-ring ring-two"></span><span className="mic">{voiceState==="idle"?"●":"■"}</span>
         </button>
+        {latestReply&&<p className="voice-reply">{latestReply}</p>}
         <strong>{voiceLabel}</strong>
         {(voiceState==="listening"||voiceState==="speaking")&&<div className="live-meter"><span className="live-dot"></span><span>VOICE LIVE</span><div className="meter-bars">{[1,2,3,4,5,6,7].map(i=><i key={i} style={{transform:"scaleY("+Math.max(.18,micLevel*(.55+(i%3)*.18))+")"}}/> )}</div><button className="stop-voice" onClick={stopVoice}>End</button></div>}
         {input&&voiceState!=="idle"&&<div className="live-transcript">{input}</div>}
-        {conversation.length>0&&<div className="voice-conversation">{conversation.slice(-8).map((m,i)=><div key={i} className={m.role}>{m.role==="user"?"You":"OVAM AI"}: {m.text}</div>)}</div>}
-        <span>{voiceState==="listening"?"Speak naturally about the prospect.":voiceState==="speaking"?"You can interrupt OVAM at any time.":voiceState==="connecting"?"Starting the live voice session.":"Tap the microphone and tell OVAM AI what happened."}</span>{lastVoiceEvent&&voiceState!=="idle"&&<small className="voice-debug">Event: {lastVoiceEvent}</small>}
+        {conversation.length>1&&<div className="voice-conversation">{conversation.slice(-8,-1).map((m,i)=><div key={i} className={m.role}>{m.role==="user"?"You":"OVAM AI"}: {m.text}</div>)}</div>}
+        <span>{voiceState==="listening"?"Speak naturally about the prospect.":voiceState==="speaking"?"You can interrupt OVAM at any time.":voiceState==="connecting"?"Starting the live voice session.":"Tap the microphone and tell OVAM AI what happened."}</span>
       </div>
 
       <div className="text-fallback">
@@ -297,7 +319,9 @@ function App(){
 
     {lead&&<section className="lead-card card">
       <div className="lead-head"><div><span className="kicker">AI CAPTURED</span><h2>{lead.name||"New prospect"}</h2><p>{lead.property||"Property interest"}{lead.location?" · "+lead.location:""}</p></div><span className="status">{lead.status||"New"}</span></div>
-      <div className="lead-grid">{Object.entries(lead).map(([key,value])=><label key={key}><span>{fieldLabels[key]||key}</span><input value={value||""} onChange={e=>setLead({...lead,[key]:e.target.value})}/></label>)}</div>
+      <div className="fact-row">{factChips(lead).map(fact=><span className="fact-chip" key={fact.key}>{fact.value}</span>)}{missingFact(lead)?<span className="fact-missing">Still missing · {missingFact(lead)}</span>:<span className="fact-missing ready">Ready to save</span>}</div>
+      <button className="secondary record-toggle" onClick={()=>setShowRecord(open=>!open)}>{showRecord?"Hide full record":"Full record"}</button>
+      {showRecord&&<div className="lead-grid">{Object.entries(lead).map(([key,value])=><label key={key}><span>{fieldLabels[key]||key}</span><input value={value||""} onChange={e=>setLead({...lead,[key]:e.target.value})}/></label>)}</div>}
       <div className="lead-actions"><button className="save" onClick={saveLead}>Save to OVAM CRM</button><button className="secondary" onClick={()=>setLead(null)}>Edit later</button></div>
     </section>}
 
@@ -305,7 +329,7 @@ function App(){
       <div className="section-head"><div><span className="kicker">YOUR PIPELINE</span><h2>Recent leads</h2></div><span className="count">{list.length}</span></div>
       {!list.length?<div className="empty"><strong>Your CRM is ready.</strong><span>Tell OVAM AI about your first prospect.</span></div>:<div className="leads">{list.map(x=><article key={x.id}><div className="avatar">{(x.name||"?").slice(0,1).toUpperCase()}</div><div><strong>{x.name||"Unnamed lead"}</strong><span>{x.property||"Property"} · {x.location||"Location"}</span><small>{x.budget||"Budget not captured"} · {x.timeline||"Timeline not captured"}</small></div><b>{x.status||"New"}</b></article>)}</div>}
     </section>
-    <footer><span>OVAM AI</span><span>Built for OVAM Realty · Gemma at the core</span></footer>
+    <footer><span>OVAM AI</span><span>Built for OVAM Realty · Gemma is the brain · AssemblyAI hears and speaks</span></footer>
   </main>
 }
 createRoot(document.getElementById("root")).render(<App/>);
