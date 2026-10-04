@@ -209,14 +209,7 @@ function App(){
           case"transcript.user.delta":
             setInput(data.text||"");break;
           case"transcript.user":
-            if(data.text){
-              setInput(data.text);addConversation("user",data.text);
-              try{
-                if(socket.readyState===WebSocket.OPEN){
-                  socket.send(JSON.stringify({type:"reply.create",instructions:"Respond naturally to the user's latest message. Keep the reply brief and conversational."}));
-                }
-              }catch{}
-            }
+            if(data.text){setInput(data.text);addConversation("user",data.text)}
             break;
           case"reply.started":
             setVoiceState("speaking");break;
